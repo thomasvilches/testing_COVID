@@ -61,7 +61,7 @@ end
     β = 0.0345       
     seasonal::Bool = false ## seasonal betas or not
     popsize::Int64 = 100000
-    prov::Symbol = :usa
+    prov::Symbol = :canada
     calibration::Bool = false
     calibration2::Bool = false 
     start_several_inf::Bool = true
@@ -191,6 +191,10 @@ end
     waning::Int64 = 0
     ### after calibration, how much do we want to increase the contact rate... in this case, to reach 70%
     ### 0.5*0.95 = 0.475, so we want to multiply this by 1.473684211
+    proportion_contacts_workplace::Float64 = 0.0
+    proportion_contacts_school::Float64 = 0.0
+
+    initial_day_week::Int64 = 1 # 1- Monday ... 7- Sunday
 end
 
 Base.@kwdef mutable struct ct_data_collect
@@ -357,6 +361,8 @@ function main(ip::ModelParameters,sim::Int64)
 
     # split population in agegroups 
     grps = get_ag_dist()
+    workplaces = create_workplace()
+    schools = create_schools()
     count_change::Int64 = 1
     
     time_vac::Int64 = 1
@@ -366,6 +372,7 @@ function main(ip::ModelParameters,sim::Int64)
     total_given::Int64 = 0
     count_relax::Int64 = 1
 
+    initial_dw::Int64 = p.initial_day_week
 
     unvac_rec::Vector{Int64} = zeros(Int64,p.modeltime)
     unvac_unrec::Vector{Int64} = zeros(Int64,p.modeltime)
@@ -468,9 +475,14 @@ function main(ip::ModelParameters,sim::Int64)
         #println([time_vac length(findall(x-> x.vac_status == 2 && x.age >= 18,humans))])
        
         _get_model_state(st, hmatrix) ## this datacollection needs to be at the start of the for loop
-        dyntrans(st, grps,sim)
+        dyntrans(st, grps,workplaces,schools,initial_dw,sim)
        
         sw = time_update() ###update the system
+
+        initial_dw += 1
+        if initial_dw > 7
+            initial_dw = 1
+        end
 
         unvac_unrec[st] = sw[2]
         unvac_rec[st] = sw[1]
@@ -484,10 +496,91 @@ function main(ip::ModelParameters,sim::Int64)
     return hmatrix, remaining_doses, total_given, unvac_rec,unvac_unrec,vac_1,vac_2,vac_3 ## return the model state as well as the age groups. 
 end
 export main
-#= 
-function create_work()
+
+##### creating workplaces
+function work_size() #https://www150.statcan.gc.ca/t1/tbl1/en/cv.action?pid=3310039501
+    breaks = [1:4,5:9,10:19,20:49,50:99,100:199,200:499,500:1000]
+    #s = [748387, 233347, 152655, 99732, 32889, 14492, 7119, 2803]
+    #s/=sum(s)
+   # s = [0.5795052593106524,0.18068968828208243,0.11820672374061501,0.07722637956240554,0.025467236167207672,0.01122172113883589,0.00551251951334341,0.0021704722848576454]
+    aux = Distributions.Categorical(@SVector [0.5795052593106524,0.18068968828208243,0.11820672374061501,0.07722637956240554,0.025467236167207672,0.01122172113883589,0.00551251951334341,0.0021704722848576454])
+
+    return aux,breaks
+end
+
+### I can change it to split basic, mid, and high
+function create_workplace() 
+    pos = findall(x-> x.age in 20:65,humans)
+    N = length(pos)
     
-end =#
+    probs,breaks = work_size()
+    vaux = map(y-> rand(breaks[rand(probs)]),1:Int(round(p.popsize/10.0)))
+    vvaux = cumsum(vaux)
+    aux = findfirst(y-> y > N, vvaux)
+
+    aux == nothing && error("increase the number of workplaces")
+
+    vaux = vaux[1:aux]
+    vvaux = vvaux[1:aux]
+
+    vaux[end] = N-vvaux[end-1]
+    
+
+    samples::Vector{Vector{Int64}} = map(y-> [y],1:length(vaux))
+
+    for i = 1:length(samples)
+        xx = sample(pos,vaux[i],replace=false)
+        pos = setdiff(pos,xx)
+    
+        for j in xx
+            humans[j].workplace_idx = i
+        end
+        samples[i] = deepcopy(xx)
+    end
+
+
+    return samples
+end 
+
+
+
+##### creating schools
+function schools_size()
+    size = 100
+    return size
+end
+
+### I can change it to split basic, mid, and high
+function create_schools()
+    pos = findall(x-> x.age in 5:18,humans)
+    N = length(pos)
+    
+    vaux = map(y-> schools_size(),1:Int(round(p.popsize/10.0)))
+    vvaux = cumsum(vaux)
+    aux = findfirst(y-> y > N, vvaux)
+    aux == nothing && error("increase the number of schools")
+
+    vaux = vaux[1:aux]
+    vvaux = vvaux[1:aux]
+
+    vaux[end] = N-vvaux[end-1]
+    
+
+    samples::Vector{Vector{Int64}} = map(y-> [y],1:length(vaux))
+
+    for i = 1:length(samples)
+        xx = sample(pos,vaux[i],replace=false)
+        pos = setdiff(pos,xx)
+    
+        for j in xx
+            humans[j].school_idx = i
+        end
+        samples[i] = deepcopy(xx)
+    end
+
+
+    return samples
+end 
 
 function waning_immunity(x::Human)
     index = Int(floor(x.days_vac/7))
@@ -982,57 +1075,20 @@ export _collectdf, _get_incidence_and_prev, _get_column_incidence, _get_column_p
 ## initialization functions 
 function get_province_ag(prov) 
     ret = @match prov begin
-        :southdakota => Distributions.Categorical(@SVector [0.069141895351768,0.202790001571227,0.369067629448183,0.187328676925233,0.171671796703589])
-        :northdakota => Distributions.Categorical(@SVector [0.070992911337923,0.192472528481935,0.404238762725343,0.175031690334907,0.157264107119893])
-        :nebraska => Distributions.Categorical(@SVector [0.067658942684274,0.206234155359159,0.383957262376913,0.180623219093387,0.161526420486268])
-        :kansas => Distributions.Categorical(@SVector [0.063615181885646,0.204838887946854,0.384556556553808,0.183777649783031,0.163211723830662])
-        :iowa => Distributions.Categorical(@SVector [0.062006865140869,0.196730658907726,0.375836986184142,0.190166620708891,0.175258869058373])
-        :indiana => Distributions.Categorical(@SVector [0.062139986830494,0.198557117645757,0.387121096327971,0.190906148477939,0.161275650717839])
-        :washington => Distributions.Categorical(@SVector [0.059945162722575,0.18172678197842,0.413535948568155,0.18592933610492,0.15886277062593])
-        :alaska => Distributions.Categorical(@SVector [0.069824822806526,0.199265937160393,0.419576376026082,0.186134824241844,0.125198039765155])
-        :wyoming => Distributions.Categorical(@SVector [0.060355000958948,0.195661752128261,0.382288655554384,0.190329653620937,0.171364937737469])
-        :utah => Distributions.Categorical(@SVector [0.077294524756719,0.243549042127189,0.423226068463779,0.141807846515768,0.114122518136545])
-        :montana => Distributions.Categorical(@SVector [0.057220489194201,0.180823332815608,0.372861342580031,0.195942468875669,0.193152366534491])
-        :newmexico => Distributions.Categorical(@SVector [0.057699507208266,0.195879587701238,0.379771550279017,0.186565046553629,0.18008430825785])
-        :districtofcolumbia => Distributions.Categorical(@SVector [0.064283477553635,0.147317247349979,0.514870017527478,0.14976996070841,0.123759296860499])
-        :idaho => Distributions.Categorical(@SVector [0.065022816741417,0.212624051167697,0.382128238200625,0.177572723991573,0.162652169898689])
-        :delaware => Distributions.Categorical(@SVector [0.056193287079826,0.178886259915133,0.365612201724442,0.205312580871751,0.193995670408846])
-        :rhodeisland => Distributions.Categorical(@SVector [0.051465930877199,0.173710378237447,0.389835948274479,0.208422813375233,0.176564929235643])
-        :newjersey => Distributions.Categorical(@SVector [0.057946294776401,0.184278539414266,0.384542550879907,0.207109733072587,0.166122881856839])
-        :wisconsin => Distributions.Categorical(@SVector [0.056762515470334,0.187481558399803,0.375762610619545,0.205282361294263,0.174710954216055])
-        :newhampshire => Distributions.Categorical(@SVector [0.046790089952939,0.167253923811751,0.370258827059574,0.228992778612514,0.186704380563223])
-        :colorado => Distributions.Categorical(@SVector [0.05768644369181,0.186806618674654,0.42620898058185,0.183013772466736,0.146284184584951])
-        :california => Distributions.Categorical(@SVector [0.060328572249656,0.190869569651902,0.41753535355376,0.183511846448123,0.147754658096559])
-        :michigan => Distributions.Categorical(@SVector [0.056718745447141,0.184367113697533,0.37770471730996,0.204436991537978,0.176772432007387])
-        :maine => Distributions.Categorical(@SVector [0.047267097749462,0.161894849919507,0.353223301086436,0.225397481944812,0.212217269299783])
-        :connecticut => Distributions.Categorical(@SVector [0.05096644393565,0.181716647215217,0.376013207351891,0.214531396771144,0.176772304726099])
-        :oregon => Distributions.Categorical(@SVector [0.054012613873269,0.174896870051404,0.402817435036846,0.186640134271056,0.181632946767425])
-        :minnesota => Distributions.Categorical(@SVector [0.06234839436332,0.193935348973124,0.385302622582466,0.195214687766861,0.163198946314228])
-        :virginia => Distributions.Categorical(@SVector [0.059220417645371,0.185337177504965,0.400913172356596,0.195323213503479,0.159206018989589])
-        :pennsylvania => Distributions.Categorical(@SVector [0.054516841093989,0.178067486232022,0.37460593037535,0.205857386692021,0.186952355606617])
-        :illinois => Distributions.Categorical(@SVector [0.058944487931135,0.189268377449461,0.396559894588157,0.193985063393809,0.161242176637438])
-        :ohio => Distributions.Categorical(@SVector [0.059100187354031,0.187871179132696,0.377904372449547,0.200062023594631,0.175062237469095])
-        :arizona => Distributions.Categorical(@SVector [0.059047219448153,0.19355196801854,0.389072002662008,0.178539844315969,0.179788965555331])
-        :kentucky => Distributions.Categorical(@SVector [0.061018342210811,0.189432843451166,0.384296702108682,0.197253245705315,0.167998866524027])
-        :tennessee => Distributions.Categorical(@SVector [0.059832272541306,0.185814711998845,0.392468254579544,0.194457045610494,0.167427715269812])
-        :southcarolina => Distributions.Categorical(@SVector [0.056803310496563,0.18555604370334,0.379181286822302,0.196467700478217,0.181991658499579])
-        :northcarolina => Distributions.Categorical(@SVector [0.05813931314814,0.189039961922502,0.391583438881687,0.194276952778029,0.166960333269642])
-        :nevada => Distributions.Categorical(@SVector [0.060248571825583,0.186580484884532,0.404644764745682,0.187504464059613,0.161021714484591])
-        :westvirginia => Distributions.Categorical(@SVector [0.05190701432416,0.172668871470923,0.364284291411363,0.206351376310091,0.204788446483464])
-        :oklahoma => Distributions.Categorical(@SVector [0.064577930947687,0.202923397720125,0.390831269675719,0.181157759306298,0.160509642350171])
-        :maryland => Distributions.Categorical(@SVector [0.059867045559805,0.186543780021437,0.391742698918897,0.203155310899684,0.158691164600177])
-        :massachusetts => Distributions.Categorical(@SVector [0.051847928103912,0.174228288330088,0.400024925632967,0.204246120748877,0.169652737184155])
-        :newyork => Distributions.Categorical(@SVector [0.057932889510563,0.174466515410726,0.399115102885276,0.199048852803865,0.16943663938957])
-        :texas => Distributions.Categorical(@SVector [0.068661166046309,0.214502673672857,0.416443080311993,0.171608270843711,0.128784809125131])
-        :alabama => Distributions.Categorical(@SVector [0.06003383515001,0.188057558505339,0.381706584597563,0.196878559548538,0.173323462198551])
-        :louisiana => Distributions.Categorical(@SVector [0.064848861876865,0.193984934587336,0.391711484742064,0.190053807503624,0.159400911290111])
-        :vermont => Distributions.Categorical(@SVector [0.04654408971953,0.1688683614615,0.366096197208605,0.218104806334727,0.200386545275638])
-        :missouri => Distributions.Categorical(@SVector [0.059973004978633,0.188875698419599,0.382552593692341,0.195556021186725,0.173042681722702])
-        :georgia => Distributions.Categorical(@SVector [0.061838545944718,0.202038008658033,0.40539884301492,0.18785057353371,0.14287402884862])
-        :florida => Distributions.Categorical(@SVector [0.053066205252444,0.166443652792657,0.372408508401048,0.198686342048047,0.209395291505804])
-        :mississippi => Distributions.Categorical(@SVector [0.061649467146974,0.200597819531213,0.384003287469814,0.190218298882213,0.163531126969785])
-        :arkansas => Distributions.Categorical(@SVector [0.062450709191187,0.195660155530313,0.380966424592187,0.187325618231005,0.173597092455309])
-        :usa => Distributions.Categorical(@SVector [0.059444636404977,0.188450296592341,0.396101793107413,0.189694011721906,0.166309262173363])
+        :alberta => Distributions.Categorical(@SVector [0.0655, 0.1851, 0.4331, 0.1933, 0.1230])
+        :bc => Distributions.Categorical(@SVector [0.0475, 0.1570, 0.3905, 0.2223, 0.1827])
+        :canada => Distributions.Categorical(@SVector [0.0540, 0.1697, 0.3915, 0.2159, 0.1689])
+        :manitoba => Distributions.Categorical(@SVector [0.0634, 0.1918, 0.3899, 0.1993, 0.1556])
+        :newbruns => Distributions.Categorical(@SVector [0.0460, 0.1563, 0.3565, 0.2421, 0.1991])
+        :newfdland => Distributions.Categorical(@SVector [0.0430, 0.1526, 0.3642, 0.2458, 0.1944])
+        :nwterrito => Distributions.Categorical(@SVector [0.0747, 0.2026, 0.4511, 0.1946, 0.0770])
+        :novasco => Distributions.Categorical(@SVector [0.0455, 0.1549, 0.3601, 0.2405, 0.1990])
+        :nunavut => Distributions.Categorical(@SVector [0.1157, 0.2968, 0.4321, 0.1174, 0.0380])
+        :pei => Distributions.Categorical(@SVector [0.0490, 0.1702, 0.3540, 0.2329, 0.1939])
+        :quebec => Distributions.Categorical(@SVector [0.0545, 0.1615, 0.3782, 0.2227, 0.1831])
+        :saskat => Distributions.Categorical(@SVector [0.0666, 0.1914, 0.3871, 0.1997, 0.1552])
+        :yukon => Distributions.Categorical(@SVector [0.0597, 0.1694, 0.4179, 0.2343, 0.1187])
+        :ontario => Distributions.Categorical(@SVector [0.0519, 0.1727, 0.3930, 0.2150, 0.1674])
         :newyorkcity   => Distributions.Categorical(@SVector [0.064000, 0.163000, 0.448000, 0.181000, 0.144000])
         _ => error("shame for not knowing your canadian provinces and territories")
     end       
@@ -1855,7 +1911,7 @@ export _get_betavalue
     return cnt
 end
 
-function dyntrans(sys_time, grps,sim)
+function dyntrans(sys_time, grps,workplaces,schools,initial_dw,sim)
     totalmet = 0 # count the total number of contacts (total for day, for all INF contacts)
     totalinf = 0 # count number of new infected 
     ## find all the people infectious
@@ -1868,10 +1924,54 @@ function dyntrans(sys_time, grps,sim)
             xhealth = x.health
             cnts = x.nextday_meetcnt
             cnts == 0 && continue # skip person if no contacts
+
+            if !x.iso && initial_dw ∉ (6,7) ###if no isolated and working days
+
+                if x.workplace_idx > 0 
+                    if x.school_idx > 0
+                        ## carefull here
+                        cnts_s = Int(round(cnts*(p.proportion_contacts_school)))
+                        cnts_w = Int(round(cnts*(p.proportion_contacts_workplace)))
+                        cnts = cnts-cnts_w-cnts ##carefull here
+
+                        gpw = Int.(round.(cm[x.ag]*cnts)) # split the counts over age groups
+                        gpw = [gpw;cnts_w;cnts_s]
             
-            gpw = Int.(round.(cm[x.ag]*cnts)) # split the counts over age groups
+                        grp_sample = [grps;[workplaces[x.workplace_idx]];[schools[x.school_idx]]]
+                    else
+                        cnts_w = Int(round(cnts*(p.proportion_contacts_workplace)))
+                        cnts = cnts-cnts_w 
+
+                        gpw = Int.(round.(cm[x.ag]*cnts)) # split the counts over age groups
+                        gpw = [gpw;cnts_w]
+            
+                        grp_sample = [grps;[workplaces[x.workplace_idx]]]
+                    end
+                else
+                    if x.school_idx > 0
+                        cnts_s = Int(round(cnts*(p.proportion_contacts_school)))
+                        cnts = cnts-cnts_s
+
+                        gpw = Int.(round.(cm[x.ag]*cnts)) # split the counts over age groups
+                        gpw = [gpw;cnts_s]
+            
+                        grp_sample = [grps;[schools[x.school_idx]]]
+                    else
+                        
+                        gpw = Int.(round.(cm[x.ag]*cnts)) # split the counts over age groups
+                        
+                        grp_sample = grps
+                    
+                    end
+                end
+            else
+                gpw = Int.(round.(cm[x.ag]*cnts)) # split the counts over age groups
+                grp_sample = grps 
+            end
+
+
             for (i, g) in enumerate(gpw) 
-                meet = rand(grps[i], g)   # sample the people from each group
+                meet = rand(grp_sample[i], g)   # sample the people from each group
                 # go through each person
                 for j in meet 
                     y = humans[j]
