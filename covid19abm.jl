@@ -54,6 +54,13 @@ Base.@kwdef mutable struct Human
 
     workplace_idx::Int64 = -1
     school_idx::Int64 = -1
+
+    #### for testing
+
+    daysafterpositive::Int64 = 999
+    positive::Bool = false
+    daysforpcr::Int64 = -1
+    daysinf::Int64 = -1
 end
 
 ## default system parameters
@@ -178,6 +185,7 @@ end
     α::Float64 = 1.0
     α2::Float64 = 0.0
     α3::Float64 = 1.0
+    daysofvac::Int64 = 365### check it
     doubledose::Int64 = 999
     doubledose_kids::Int64 = 999
     rate_dd_kids::Float64 = 2.0
@@ -194,7 +202,12 @@ end
     proportion_contacts_workplace::Float64 = 0.0
     proportion_contacts_school::Float64 = 0.0
 
+    ##for testing
     initial_day_week::Int64 = 1 # 1- Monday ... 7- Sunday
+    testing_days::Vector{Int64} = [2;4;6]
+    days_ex_test::Int64 = 90 ## 3 months without testing
+    isolation_test_days::Int64 = 10 #how many days of isolation after testing
+    pcrend::Bool = false #perform a pcr at the end of isolation?
 end
 
 Base.@kwdef mutable struct ct_data_collect
@@ -379,6 +392,8 @@ function main(ip::ModelParameters,sim::Int64)
     vac_1::Vector{Int64} = zeros(Int64,p.modeltime)
     vac_2::Vector{Int64} = zeros(Int64,p.modeltime)
     vac_3::Vector{Int64} = zeros(Int64,p.modeltime)
+
+    testing_group::Int64 = select_testing_group()
   
 
     if p.vaccinating
@@ -474,6 +489,7 @@ function main(ip::ModelParameters,sim::Int64)
 
         #println([time_vac length(findall(x-> x.vac_status == 2 && x.age >= 18,humans))])
        
+        testing(grp,initial_dw)
         _get_model_state(st, hmatrix) ## this datacollection needs to be at the start of the for loop
         dyntrans(st, grps,workplaces,schools,initial_dw,sim)
        
@@ -542,7 +558,64 @@ function create_workplace()
     return samples
 end 
 
+function select_testing_group()
+    ### we can change this function to implement different test strategies
+    grp = findall(y-> y.age in 12:65,humans)
+    return grp
+end
 
+function testing(grp,dayweek)
+    npcr::Int64 = 0
+    ntest::Int64 = 0
+    for i in grp
+        x = humans[i]
+        if !x.positive 
+            x.daysafterpositive += 1 #need to add one here
+            if dayweek in p.testing_days && x.daysafterpositive > p.days_ex_test #check if they will be tested
+                test_individual(x)
+                ntest+=1
+            end
+        else
+            x.daysafterpositive += 1 #need to add one here
+            if x.daysafterpositive == x.days_for_pcr ## gap between antigen and pcr results
+                test_individual_pcr(x)
+                npcr+=1
+            end
+            if x.daysafterpositive > p.isolation_test_days
+                if p.pcrend #performing a new pcr?
+                    test_individual_pcr(x)
+                    npcr+=1
+                else
+                    _set_isolation(x, false, :none)
+                    x.positive = false
+                end
+            end
+            
+        end
+    end
+
+    return ntest,npcr
+end
+
+function test_individual(x::Human)
+    pp = _get_prob_test(x)
+
+    if rand() < pp
+        x.positive = true
+        x.daysafterpositive = 0
+        _set_isolation(x, true, :test)
+    end
+end
+
+function test_individual_pcr(x::Human)
+    pp = _get_prob_test_pcr(x)
+
+    if rand() > pp #the individual is already positive, so, if rand() > pp, we cancel the positivity
+        x.positive = false
+        x.daysafterpositive = 999
+        _set_isolation(x, false, :none)
+    end
+end
 
 ##### creating schools
 function schools_size()
