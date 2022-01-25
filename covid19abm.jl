@@ -21,11 +21,6 @@ Base.@kwdef mutable struct Human
     doi::Int16   = 999   # day of infection.
     iso::Bool = false  ## isolated (limited contacts)
     isovia::Symbol = :null ## isolated via quarantine (:qu), preiso (:pi), intervention measure (:im), or contact tracing (:ct)    
-    tracing::Bool = false ## are we tracing contacts for this individual?
-    tracestart::Int16 = -1 ## when to start tracing, based on values sampled for x.dur
-    traceend::Int16 = -1 ## when to end tracing
-    tracedby::UInt32 = 0 ## is the individual traced? property represents the index of the infectious person 
-    tracedxp::Int16 = 0 ## the trace is killed after tracedxp amount of days
     comorbidity::Int8 = 0 ##does the individual has any comorbidity?
     vac_status::Int8 = 0 ##
 
@@ -59,7 +54,7 @@ Base.@kwdef mutable struct Human
 
     daysafterpositive::Int64 = 999
     positive::Bool = false
-    daysforpcr::Int64 = -1
+    days_for_pcr::Int64 = -1
     daysinf::Int64 = -1
 end
 
@@ -76,12 +71,11 @@ end
     initialinf::Int64 = 20
     initialhi::Int64 = 20 ## initial herd immunity, inserts number of REC individuals
     τmild::Int64 = 0 ## days before they self-isolate for mild cases
-    fmild::Float64 = 0.0  ## percent of people practice self-isolation
-    fsevere::Float64 = 0.0 #
+    fmild::Float64 = 1.0  ## percent of people practice self-isolation
+    τinf::Int64 = 0
+    fsevere::Float64 = 1.0 #
     eldq::Float64 = 0.0 ## complete isolation of elderly
-    eldqag::Int8 = 5 ## default age group, if quarantined(isolated) is ag 5. 
-    fpreiso::Float64 = 0.0 ## percent that is isolated at the presymptomatic stage
-    tpreiso::Int64 = 0## preiso is only turned on at this time. 
+    eldqag::Int8 = 5 ## default age group, if quarantined(isolated) is ag 5.  
     frelasymp::Float64 = 0.26 ## relative transmission of asymptomatic
     fctcapture::Float16 = 0.0 ## how many symptomatic people identified
     #vaccine_ef::Float16 = 0.0   ## change this to Float32 typemax(Float32) typemax(Float64)
@@ -570,27 +564,34 @@ function testing(grp,dayweek)
     for i in grp
         x = humans[i]
         if !x.positive 
-            x.daysafterpositive += 1 #need to add one here
+            #x.daysafterpositive += 1 #need to add one here
             if dayweek in p.testing_days && x.daysafterpositive > p.days_ex_test #check if they will be tested
                 test_individual(x)
                 ntest+=1
             end
-        else
-            x.daysafterpositive += 1 #need to add one here
+        end
+    end
+
+    for x in humans
+        
+        if x.iso
             if x.daysafterpositive == x.days_for_pcr ## gap between antigen and pcr results
-                test_individual_pcr(x)
+                test_individual_pcr(x, false)
                 npcr+=1
             end
             if x.daysafterpositive > p.isolation_test_days
                 if p.pcrend #performing a new pcr?
-                    test_individual_pcr(x)
+                    test_individual_pcr(x, true)
                     npcr+=1
                 else
-                    _set_isolation(x, false, :none)
+                    _set_isolation(x, false, :null)
                     x.positive = false
                 end
             end
-            
+        end
+        x.daysafterpositive += 1 #need to add one here
+        if x.daysinf >= 0 
+            x.daysinf += 1
         end
     end
 
@@ -599,7 +600,6 @@ end
 
 function test_individual(x::Human)
     pp = _get_prob_test(x)
-
     if rand() < pp
         x.positive = true
         x.daysafterpositive = 0
@@ -607,13 +607,15 @@ function test_individual(x::Human)
     end
 end
 
-function test_individual_pcr(x::Human)
+function test_individual_pcr(x::Human,ending::Bool)
     pp = _get_prob_test_pcr(x)
 
     if rand() > pp #the individual is already positive, so, if rand() > pp, we cancel the positivity
         x.positive = false
         x.daysafterpositive = 999
-        _set_isolation(x, false, :none)
+        _set_isolation(x, false, :null)
+    else
+        x.daysafterpositive = ending ? 0 : x.daysafterpositive
     end
 end
 
@@ -1012,11 +1014,6 @@ function reset_params(ip::ModelParameters)
 end
 export reset_params, reset_params_default
 
-function _model_check() 
-    ## checks model parameters before running 
-    (p.fctcapture > 0 && p.fpreiso > 0) && error("Can not do contact tracing and ID/ISO of pre at the same time.")
-    (p.fctcapture > 0 && p.maxtracedays == 0) && error("maxtracedays can not be zero")
-end
 
 ## Data Collection/ Model State functions
 function _get_model_state(st, hmatrix)
@@ -1370,6 +1367,9 @@ export time_update
     # --> if x.iso == true from PRE and x.isovia == :pi, do not overwrite
     x.iso = iso 
     x.isovia == :null && (x.isovia = via)
+
+    x.days_for_pcr = x.iso ? rand(1:2) : 999
+
 end
 
 function sample_epi_durations()
@@ -1551,7 +1551,7 @@ function move_to_pre(x::Human)
         x.swap_status = MILD
     end
     # calculate whether person is isolated
-    rand() < p.fpreiso && _set_isolation(x, true, :pi)
+    #rand() < p.fpreiso && _set_isolation(x, true, :pi)
 end
 export move_to_pre
 
@@ -1575,12 +1575,20 @@ function move_to_mild(x::Human)
     #   and not go through the mild compartment 
     aux = x.vac_status > 0 ? p.fmild*p.red_risk_perc : p.fmild
 
-    if x.iso || rand() < aux#p.fmild
+    if x.iso
         aux_v = [MISO;MISO2;MISO3;MISO4;MISO5;MISO6]
         x.swap = aux_v[x.strain]
         x.swap_status = MISO
         #x.swap = x.strain == 1 ? MISO : MISO2  
         x.exp = p.τmild
+        
+    elseif rand() < aux#p.fmild
+        aux_v = [MISO;MISO2;MISO3;MISO4;MISO5;MISO6]
+        x.swap = aux_v[x.strain]
+        x.swap_status = MISO
+        #x.swap = x.strain == 1 ? MISO : MISO2  
+        x.exp = p.τmild
+        x.daysafterpositive = 0
     end
 end
 export move_to_mild
@@ -1595,6 +1603,7 @@ function move_to_miso(x::Human)
     #x.swap = x.strain == 1 ? REC : REC2
     x.tis = 0 
     x.exp = x.dur[4] - p.τmild  ## since tau amount of days was already spent as infectious
+    
     _set_isolation(x, true, :mi) 
 end
 export move_to_miso
@@ -1711,11 +1720,17 @@ function move_to_inf(x::Human)
     else ## no hospital for this lucky (but severe) individual 
         aux = (p.mortality_inc^Int(x.strain==2 || x.strain == 4))
         aux = x.strain == 4 || x.strain == 6 ? aux*0.0 : aux
-        if x.iso || rand() < p.fsevere 
-            x.exp = 1  ## 1 day isolation for severe cases 
+        if x.iso 
+            x.exp = τinf  ## 1 day isolation for severe cases 
             aux_v = [IISO;IISO2;IISO3;IISO4;IISO5;IISO6]
             x.swap = aux_v[x.strain]
             x.swap_status = IISO
+        elseif rand() < p.fsevere 
+            x.exp = τinf  ## 1 day isolation for severe cases 
+            aux_v = [IISO;IISO2;IISO3;IISO4;IISO5;IISO6]
+            x.swap = aux_v[x.strain]
+            x.swap_status = IISO
+            x.daysafterpositive = 0
             #x.swap = x.strain == 1 ? IISO : IISO2
         else
             if rand() < mh[gg]*aux
@@ -1810,8 +1825,7 @@ function move_to_hospicu(x::Human)
     x.health_status = x.swap_status
     x.swap = UNDEF
     x.tis = 0
-    _set_isolation(x, true) # do not set the isovia property here.  
-
+ 
     if swaphealth == HOS
         x.hospicu = 1 
         if rand() < mh[gg] ## person will die in the hospital 
@@ -1859,8 +1873,8 @@ function move_to_dead(h::Human)
     h.swap_status = UNDEF
     h.tis = 0 
     h.exp = 999 ## stay recovered indefinitely
-    h.iso = true # a dead person is isolated
-    _set_isolation(h, true)  # do not set the isovia property here.  
+    #h.iso = true # a dead person is isolated
+    #_set_isolation(h, true)  # do not set the isovia property here.  
     # isolation property has no effect in contact dynamics anyways (unless x == SUS)
 end
 
@@ -1876,10 +1890,11 @@ function move_to_recovered(h::Human)
     h.swap_status = UNDEF
     h.tis = 0 
     h.exp = 999 ## stay recovered indefinitely
-    h.iso = false ## a recovered person has ability to meet others
+    #h.iso = false ## a recovered person has ability to meet others
     h.recvac = 1
+    h.daysinf = -1
     
-    _set_isolation(h, false)  # do not set the isovia property here.  
+    #_set_isolation(h, false)  # do not set the isovia property here.  
     # isolation property has no effect in contact dynamics anyways (unless x == SUS)
 end
 
@@ -2132,6 +2147,7 @@ function dyntrans(sys_time, grps,workplaces,schools,initial_dw,sim)
                         aux_v = [LAT;LAT2;LAT3;LAT4;LAT5;LAT6]
                         y.swap = aux_v[y.strain]
                         y.swap_status = LAT
+                        y.daysinf = 0
                         #y.swap = y.strain == 1 ? LAT : LAT2
                     end  
                 end
@@ -2154,6 +2170,7 @@ function contact_matrix()
    
     return CM
 end
+
 # 
 # calibrate for 2.7 r0
 # 20% selfisolation, tau 1 and 2.
