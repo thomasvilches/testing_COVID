@@ -8,7 +8,7 @@ end
 
 function vaccination_rate_1(sim::Int64)
     
-    if p.prov == :usa
+    if p.prov == :canada
         #p.day_inital_vac = 104
         v = [0 0 0 0 0 0 0 0;
             0 0 0 1 1 2 1 1;
@@ -437,7 +437,7 @@ end
 function vaccination_rate_2(sim::Int64)
     
     
-    if p.prov == :usa
+    if p.prov == :canada
         v = [0 0 0 0 0 0 0 0;
                 0 0 0 0 0 0 0 0;
                 0 0 0 0 0 0 0 0;
@@ -869,7 +869,7 @@ end
 
 function temporal_proportion()
     
-    if p.prov == :usa
+    if p.prov == :canada
         v = [1]
         fd = [0.561 0.369 0.07]
         sd = [0.561 0.369 0.0]
@@ -890,7 +890,7 @@ end
 
 function get_breaks_vac()
 
-    if p.prov == :usa
+    if p.prov == :canada
         brak = @SVector [5:11,12:17, 18:24, 25:39, 40:49, 50:64, 65:74, 75:100]
     else
         #brak = @SVector [12:15, 16:17, 18:24, 25:39, 40:49, 50:64, 65:74, 75:100]
@@ -1008,7 +1008,7 @@ end
 
 function booster_doses()
 
-    if p.prov == :usa
+    if p.prov == :canada
         v = [0
                 0
                 0
@@ -1407,7 +1407,7 @@ function booster_doses()
 end
 
 function vector_probs()
-    if p.prov == :usa
+    if p.prov == :canada
         v = [
                 0.00603544115854269
                 0.0115650479359956
@@ -1644,15 +1644,18 @@ function distribute_vaccine(M1,M2,B)
     v,fd,sd = temporal_proportion()
 
     p2 = Distributions.Categorical(sd[1,:]/sum(sd[1,:]))
-    p2 = Distributions.Categorical(fd[1,:]/sum(fd[1,:]))
+    p1 = Distributions.Categorical(fd[1,:]/sum(fd[1,:]))
     ##firstly, let's distribute age-based second doses.
     
-    for i in 1:length(braks)
+    for i in 1:6#length(braks)
+        println(i)
         pos = findall(y-> y.age in braks[i],humans)
 
         N = sum(M2[:,i]) ##number of vaccinated
+        Vaux = reverse(M2[:,i])
+       
+        p_day = Distributions.Categorical(Vaux/sum(Vaux))
 
-        p_day = Distributions.Categorical(M2[:,i]/N)
 
         n1 = min(N,length(pos))
         pos_vac = sample(pos,n1,replace = false)
@@ -1661,10 +1664,10 @@ function distribute_vaccine(M1,M2,B)
         for j in pos_vac
             x = humans[j]
             x.vac_status = 2
-            x.vaccine_n = rand(p2) #rand the vaccine
+            x.vaccine_n = x.age >= 18 ? rand(p2) : 1#rand the vaccine
             x.vaccine = [:pfizer,:moderna,:jensen][x.vaccine_n]
             x.days_vac = rand(p_day) ##rand the day
-            x.protected = findfirst(y-> y < x.days_vac,reverse(p.days_to_protection[x.vaccine_n][x.vac_status]))
+            x.protected = x.days_vac > p.days_to_protection[x.vaccine_n][x.vac_status][1] ? findfirst(y-> y < x.days_vac,p.days_to_protection[x.vaccine_n][x.vac_status]) : 0
             x.index_day = min(length(p.days_to_protection[x.vaccine_n][x.vac_status]),x.protected+1)
 
             x.vac_eff_inf = deepcopy(p.vac_efficacy_inf[x.vaccine_n])
@@ -1708,12 +1711,15 @@ function distribute_vaccine(M1,M2,B)
         pos_vac = sample(pos,n1,replace = false)
         
         for j in pos_vac
+            #println(j)
             x = humans[j]
             x.vac_status = 1
-            x.vaccine_n = rand(p1) #rand the vaccine
+            
+            x.vaccine_n = x.age >= 18 ? rand(p1) : 1#rand the vaccine
+                
             x.vaccine = [:pfizer,:moderna,:jensen][x.vaccine_n]
             x.days_vac = rand(p_day) ##rand the day
-            x.protected = findfirst(y-> y < x.days_vac,reverse(p.days_to_protection[x.vaccine_n][x.vac_status]))
+            x.protected = x.days_vac > p.days_to_protection[x.vaccine_n][x.vac_status][1] ? findfirst(y-> y < x.days_vac,p.days_to_protection[x.vaccine_n][x.vac_status]) : 0
             x.index_day = min(length(p.days_to_protection[x.vaccine_n][x.vac_status]),x.protected+1)
 
             x.vac_eff_inf = deepcopy(p.vac_efficacy_inf[x.vaccine_n])
@@ -1748,7 +1754,7 @@ function distribute_vaccine(M1,M2,B)
     ### know I want to distribute booster
     Baux = reverse(B)
     for i = 1:length(Baux)
-        pos = findall(y-> y.boosted == 0 && y.days_vac >= p.booster_after[y.vaccine_n]+(i-1) && y.age >= p.min_age_booster,humans)
+        pos = findall(y-> y.vac_status == 2 && y.boosted == 0 && y.days_vac >= p.booster_after[y.vaccine_n]+(i-1) && y.age >= p.min_age_booster,humans)
 
         n1 = min(Baux[i],length(pos))
         pos_vac = sample(pos,n1,replace = false)

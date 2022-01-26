@@ -1,7 +1,6 @@
 module covid19abm
 using Base
 using Parameters, Distributions, StatsBase, StaticArrays, Random, Match, DataFrames
-include("matrices_code.jl")
 @enum HEALTH SUS LAT PRE ASYMP MILD MISO INF IISO HOS ICU REC DED  LAT2 PRE2 ASYMP2 MILD2 MISO2 INF2 IISO2 HOS2 ICU2 REC2 DED2 LAT3 PRE3 ASYMP3 MILD3 MISO3 INF3 IISO3 HOS3 ICU3 REC3 DED3 LAT4 PRE4 ASYMP4 MILD4 MISO4 INF4 IISO4 HOS4 ICU4 REC4 DED4 LAT5 PRE5 ASYMP5 MILD5 MISO5 INF5 IISO5 HOS5 ICU5 REC5 DED5 LAT6 PRE6 ASYMP6 MILD6 MISO6 INF6 IISO6 HOS6 ICU6 REC6 DED6 UNDEF
 Base.@kwdef mutable struct Human
     idx::Int64 = 0 
@@ -216,6 +215,7 @@ end
 
 Base.show(io::IO, ::MIME"text/plain", z::Human) = dump(z)
 
+include("matrices_code.jl")
 ## constants 
 const humans = Array{Human}(undef, 0) 
 const p = ModelParameters()  ## setup default parameters
@@ -327,23 +327,6 @@ function main(ip::ModelParameters,sim::Int64)
     vac_rate_booster::Vector{Int64} = booster_doses()
     vaccination_days::Vector{Int64} = days_vac_f(size(vac_rate_1,1))
 
-    if p.doubledose-p.day_inital_vac < length(vac_rate_booster)
-        vac_rate_1[(p.doubledose-p.day_inital_vac):end,:] = 2*vac_rate_1[(p.doubledose-p.day_inital_vac):end,:]
-        vac_rate_2[(p.doubledose-p.day_inital_vac):end,:] = 2*vac_rate_2[(p.doubledose-p.day_inital_vac):end,:]
-        vac_rate_booster[(p.doubledose-p.day_inital_vac):end] = 2*vac_rate_booster[(p.doubledose-p.day_inital_vac):end]
-    end
-    
-    if p.doubledose_kids-p.day_inital_vac < size(vac_rate_1,1)
-        vac_rate_1[(p.doubledose_kids-p.day_inital_vac):end,1:2] = Int.(round.(p.rate_dd_kids*vac_rate_1[(p.doubledose_kids-p.day_inital_vac):end,1:2]))
-        vac_rate_2[(p.doubledose_kids-p.day_inital_vac):end,1:2] = Int.(round.(p.rate_dd_kids*vac_rate_2[(p.doubledose_kids-p.day_inital_vac):end,1:2]))
-        #vac_rate_booster[p.doubledose_kids:end] = vac_rate_booster[p.doubledose_kids:end]
-    end
-
-    if p.booster_increase-p.day_inital_vac < length(vac_rate_booster)
-        vac_rate_booster[(p.booster_increase-p.day_inital_vac):end] = Int.(round.(p.increase_booster_rate*vac_rate_booster[(p.booster_increase-p.day_inital_vac):end]))
-    end
-
-    
     agebraks_vac::SVector{8, UnitRange{Int64}} = get_breaks_vac()#@SVector [0:0,1:4,5:14,15:24,25:44,45:64,65:74,75:100]
 
     v_prop,fd_prop,sd_prop = temporal_proportion()
