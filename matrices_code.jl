@@ -884,8 +884,8 @@ function temporal_proportion()
     
     if p.prov == :canada
         v = [1]
-        fd = [0.561 0.369 0.07]
-        sd = [0.561 0.369 0.0]
+        fd = [0.77 0.23 0.0]
+        sd = [0.77 0.23 0.0]
 
     else
        error("no distribution for proportion")
@@ -894,7 +894,6 @@ function temporal_proportion()
     if !p.using_jj
         sd[:,3] .= 0
         fd[:,3] .= 0
-        
     end
 
     return v,fd,sd

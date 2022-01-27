@@ -9,7 +9,7 @@
   - DONE
 - To change vaccination rates, proportions, booster
   - DONE rates and booster
-  - lacks proportions
+  - DONE proportions
 - To change the sample_epi_duration
   - DONE
 - To change deaths outside the hospital
