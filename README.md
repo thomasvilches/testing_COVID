@@ -11,6 +11,8 @@
   - DONE rates and booster
   - lacks proportions
 - To change the sample_epi_duration
+  - DONE
 - To change deaths outside the hospital
+  - DONE
 
 # **CARE: daysofvac**
