@@ -1090,7 +1090,7 @@ function herd_immu_dist_4(sim::Int64,strain::Int64)
     end
 
     vprob::Vector{Float64} = vector_probs()
-
+    dprob = Distributions.Categorical(vprob)
     for g = 1:6
         pos = findall(y->y.ag_new == g && y.health == SUS,humans)
         n_dist = min(length(pos),Int(floor(vec_n[g]*p.popsize/10000)))
@@ -1101,7 +1101,7 @@ function herd_immu_dist_4(sim::Int64,strain::Int64)
             humans[i].swap_status = REC
             move_to_recovered(humans[i])
             r = rand()
-            day = findfirst(y-> y > r, vprob)
+            day = rand(dprob)
             humans[i].days_recovered = day
             humans[i].sickfrom = INF
             humans[i].herd_im = true
@@ -1130,7 +1130,6 @@ function get_province_ag(prov)
     ret = @match prov begin
         :alberta => Distributions.Categorical(@SVector [0.0655, 0.1851, 0.4331, 0.1933, 0.1230])
         :bc => Distributions.Categorical(@SVector [0.0475, 0.1570, 0.3905, 0.2223, 0.1827])
-        :canada => Distributions.Categorical(@SVector [0.0540, 0.1697, 0.3915, 0.2159, 0.1689])
         :manitoba => Distributions.Categorical(@SVector [0.0634, 0.1918, 0.3899, 0.1993, 0.1556])
         :newbruns => Distributions.Categorical(@SVector [0.0460, 0.1563, 0.3565, 0.2421, 0.1991])
         :newfdland => Distributions.Categorical(@SVector [0.0430, 0.1526, 0.3642, 0.2458, 0.1944])
@@ -1143,6 +1142,7 @@ function get_province_ag(prov)
         :yukon => Distributions.Categorical(@SVector [0.0597, 0.1694, 0.4179, 0.2343, 0.1187])
         :ontario => Distributions.Categorical(@SVector [0.0519, 0.1727, 0.3930, 0.2150, 0.1674])
         :newyorkcity   => Distributions.Categorical(@SVector [0.064000, 0.163000, 0.448000, 0.181000, 0.144000])
+        :canada => Distributions.Categorical(@SVector [0.04922255,0.10812899,0.11792442,0.13956709,0.13534216,0.12589012,0.13876094,0.10687438,0.05550450,0.02278485])
         _ => error("shame for not knowing your canadian provinces and territories")
     end       
     return ret  
@@ -1164,12 +1164,14 @@ export comorbidity
 
 function initialize() 
     agedist = get_province_ag(p.prov)
+    agebraksnew = [0:4,5:14,15:24,25:34,35:44,45:54,55:64,65:74,75:84,85:99]
     for i = 1:p.popsize 
         humans[i] = Human()              ## create an empty human       
         x = humans[i]
         x.idx = i 
-        x.ag = rand(agedist)
-        x.age = rand(agebraks[x.ag]) 
+        agn = rand(agedist)
+        x.age = rand(agebraksnew[agn]) 
+        x.ag = findfirst(y-> x.age in y, agebraks)
         a = [4;19;49;64;79;999]
         g = findfirst(y->y>=x.age,a)
         x.ag_new = g
