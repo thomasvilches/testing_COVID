@@ -55,6 +55,7 @@ Base.@kwdef mutable struct Human
     positive::Bool = false
     days_for_pcr::Int64 = -1
     daysinf::Int64 = -1
+    tookpcr::Bool = false
 end
 
 ## default system parameters
@@ -374,7 +375,7 @@ function main(ip::ModelParameters,sim::Int64)
   
 
     if p.vaccinating
-        vac_ind::Vector{Vector{Int64}} = vac_selection(sim,16,agebraks_vac)
+        vac_ind::Vector{Vector{Int64}} = vac_selection(sim,5,agebraks_vac)
     else
         time_vac = 9999 #this guarantees that no one will be vaccinated
     end
@@ -466,7 +467,7 @@ function main(ip::ModelParameters,sim::Int64)
 
         #println([time_vac length(findall(x-> x.vac_status == 2 && x.age >= 18,humans))])
        
-        testing(grp,initial_dw)
+        testing(testing_group,initial_dw)
         _get_model_state(st, hmatrix) ## this datacollection needs to be at the start of the for loop
         dyntrans(st, grps,workplaces,schools,initial_dw,sim)
        
@@ -558,9 +559,10 @@ function testing(grp,dayweek)
     for x in humans
         
         if x.iso
-            if x.daysafterpositive == x.days_for_pcr ## gap between antigen and pcr results
+            if !x.tookpcr && x.daysafterpositive >= x.days_for_pcr ## gap between antigen and pcr results
                 test_individual_pcr(x, false)
                 npcr+=1
+                x.tookpcr = true
             end
             if x.daysafterpositive > p.isolation_test_days
                 if p.pcrend #performing a new pcr?
@@ -570,6 +572,7 @@ function testing(grp,dayweek)
                     _set_isolation(x, false, :null)
                     x.positive = false
                 end
+                x.tookpcr = false
             end
         end
         x.daysafterpositive += 1 #need to add one here
@@ -1177,10 +1180,6 @@ function initialize()
         x.ag_new = g
         x.exp = 999  ## susceptible people don't expire.
         #x.dur = sample_epi_durations() # sample epi periods   
-        if rand() < p.eldq && x.ag == p.eldqag   ## check if elderly need to be quarantined.
-            x.iso = true   
-            x.isovia = :qu         
-        end
         x.comorbidity = comorbidity(x.age)
         # initialize the next day counts (this is important in initialization since dyntrans runs first)
         get_nextday_counts(x)
@@ -1339,7 +1338,7 @@ function time_update()
 end
 export time_update
 
-@inline _set_isolation(x::Human, iso) = _set_isolation(x, iso, x.isovia)
+#@inline _set_isolation(x::Human, iso) = _set_isolation(x, iso, x.isovia)
 @inline function _set_isolation(x::Human, iso, via)
     # a helper setter function to not overwrite the isovia property. 
     # a person could be isolated in susceptible/latent phase through contact tracing
@@ -1585,6 +1584,7 @@ function move_to_mild(x::Human)
         #x.swap = x.strain == 1 ? MISO : MISO2  
         x.exp = p.τmild
         x.daysafterpositive = 0
+        x.positive = true
     end
 end
 export move_to_mild
@@ -1727,6 +1727,7 @@ function move_to_inf(x::Human)
             x.swap = aux_v[x.strain]
             x.swap_status = IISO
             x.daysafterpositive = 0
+            x.positive = true
             #x.swap = x.strain == 1 ? IISO : IISO2
         else
             if rand() < mh[gg]*aux

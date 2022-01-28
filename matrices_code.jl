@@ -2165,7 +2165,7 @@ function distribute_vaccine(M1,M2,B)
     ##firstly, let's distribute age-based second doses.
     
     for i in 1:length(braks)
-        println(i)
+        #println(i)
         pos = findall(y-> y.age in braks[i],humans)
 
         N = sum(M2[:,i]) ##number of vaccinated
@@ -2315,6 +2315,8 @@ function _get_prob_test(x::Human)
 
     if x.daysinf > 0 
         prob = 1.0
+    else
+        prob = 0.0
     end
 
     return prob
@@ -2325,6 +2327,8 @@ function _get_prob_test_pcr(x::Human)
 
     if x.daysinf > 0 
         prob = 1.0
+    else
+        prob = 0.0
     end
 
     return prob
