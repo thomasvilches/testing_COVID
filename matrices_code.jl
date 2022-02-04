@@ -2311,7 +2311,7 @@ function distribute_vaccine(M1,M2,B)
 
 end
 
-function _get_prob_test(x::Human)
+function _get_prob_ra(x::Human)
 
     if x.daysinf > 0 
         prob = 1.0
@@ -2323,7 +2323,7 @@ function _get_prob_test(x::Human)
 end
 
 
-function _get_prob_test_pcr(x::Human)
+function _get_prob_pcr(x::Human)
 
     if x.daysinf > 0 
         prob = 1.0

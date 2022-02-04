@@ -51,11 +51,14 @@ Base.@kwdef mutable struct Human
 
     #### for testing
 
-    daysafterpositive::Int64 = 999
+    daysisolation::Int64 = 999
     positive::Bool = false
     days_for_pcr::Int64 = -1
     daysinf::Int64 = -1
     tookpcr::Bool = false
+    nra::Int64 = 0
+    x.prcpp::Float64 = 0.0
+
 end
 
 ## default system parameters
@@ -201,7 +204,7 @@ end
     testing_days::Vector{Int64} = [2;4;6]
     days_ex_test::Int64 = 90 ## 3 months without testing
     isolation_test_days::Int64 = 10 #how many days of isolation after testing
-    pcrend::Bool = false #perform a pcr at the end of isolation?
+    days_for_ra::Int64 = 2
 end
 
 Base.@kwdef mutable struct ct_data_collect
@@ -539,71 +542,105 @@ end
 function select_testing_group()
     ### we can change this function to implement different test strategies
     grp = findall(y-> y.age in 12:65,humans)
+
+    for i in grp
+        humans[i].test = true
+    end
+
     return grp
 end
 
 function testing(grp,dayweek)
     npcr::Int64 = 0
-    ntest::Int64 = 0
-    for i in grp
-        x = humans[i]
-        if !x.positive 
-            #x.daysafterpositive += 1 #need to add one here
-            if dayweek in p.testing_days && x.daysafterpositive > p.days_ex_test #check if they will be tested
-                test_individual(x)
-                ntest+=1
-            end
-        end
-    end
+    nra::Int64 = 0
 
     for x in humans
+
+        if x.days_for_pcr == 0
+            if rand() > x.pcrpp
+                _set_isolation(x,false,:null)
+                x.nra = 0
+                x.positive = false
+            end
+
+        else
+            x.days_for_pcr -= 1
+        end
+
+        if x.iso && x.daysisolation >= x.isolation_test_days && !(x.health_status in (HOS,ICU,DED))
+            _set_isolation(x,false,:null)
+            x.nra = 0
+            x.positive = false
+        end
         
-        if x.iso
-            if !x.tookpcr && x.daysafterpositive >= x.days_for_pcr ## gap between antigen and pcr results
-                test_individual_pcr(x, false)
-                npcr+=1
-                x.tookpcr = true
-            end
-            if x.daysafterpositive > p.isolation_test_days
-                if p.pcrend #performing a new pcr?
-                    test_individual_pcr(x, true)
-                    npcr+=1
-                else
-                    _set_isolation(x, false, :null)
-                    x.positive = false
+        if x.nra == 0
+            if x.health_status in (MILD,MISO,INF,IISO)
+                x.daysisolation = 0
+                pp = _get_prob_ra(x)
+                if rand() < pp
+                    x.positive = true
                 end
-                x.tookpcr = false
+                x.nra += 1
+                nra+=1
+                _set_isolation(x,true,:symptoms)
+            elseif dayweek in p.testing_days && x.daysisolation > p.days_ex_test && x.idx in grp
+                pp = _get_prob_ra(x)
+                if rand() < pp
+                    x.daysisolation = 0
+                    x.positive = true
+                    _set_isolation(x,true,:test)
+                    if p.scenariotest == 1
+                        x.tookpcr = true
+                        x.days_for_pcr = rand(1:2)
+                        npcr+=1
+                        x.pcrpp = _get_prob_pcr(x)
+                    end
+                    
+                end
+                x.nra += 1
+                nra += 1
+                
             end
+        elseif x.nra == 1
+            if x.isovia == :symptoms && x.daysisolation >= p.days_for_ra
+                pp = _get_prob_ra(x)
+                x.nra += 1
+                nra+=1
+                if rand() > pp 
+                    if x.health_status in (MILD,MISO,INF,IISO)
+                        x.tookpcr = true
+                        x.days_for_pcr = rand(1:2)
+                        x.pcrpp = _get_prob_pcr(x)
+                        npcr+=1
+                    else
+                        _set_isolation(x,false,:null)
+                        x.nra = 0
+                        x.positive = false
+                    end
+                end
+                
+            elseif p.scenariotest == 2 && x.isovia == :test && x.daysisolation >= p.days_for_ra
+
+                pp = _get_prob_ra(x)
+                x.nra += 1
+                nra+=1
+                if rand() > pp 
+                    x.tookpcr = true
+                    x.days_for_pcr = rand(1:2)
+                    npcr+=1
+                    x.pcrpp = _get_prob_pcr(x)
+                end
+            end
+
+
         end
-        x.daysafterpositive += 1 #need to add one here
-        if x.daysinf >= 0 
-            x.daysinf += 1
-        end
+
+
     end
 
-    return ntest,npcr
+    return nra,npcr
 end
 
-function test_individual(x::Human)
-    pp = _get_prob_test(x)
-    if rand() < pp
-        x.positive = true
-        x.daysafterpositive = 0
-        _set_isolation(x, true, :test)
-    end
-end
-
-function test_individual_pcr(x::Human,ending::Bool)
-    pp = _get_prob_test_pcr(x)
-
-    if rand() > pp #the individual is already positive, so, if rand() > pp, we cancel the positivity
-        x.positive = false
-        x.daysafterpositive = 999
-        _set_isolation(x, false, :null)
-    else
-        x.daysafterpositive = ending ? 0 : x.daysafterpositive
-    end
-end
 
 ##### creating schools
 function schools_size()
@@ -1275,6 +1312,9 @@ function time_update()
     for x in humans 
         x.tis += 1 
         x.doi += 1 # increase day of infection. variable is garbage until person is latent
+        if x.daysinf >= 0 
+            x.daysinf += 1
+        end
         if x.recovered 
             x.days_recovered += 1
         end
@@ -1350,9 +1390,7 @@ export time_update
     # --> if x.iso == true from CT and x.isovia == :ct, do not overwrite
     # --> if x.iso == true from PRE and x.isovia == :pi, do not overwrite
     x.iso = iso 
-    x.isovia == :null && (x.isovia = via)
-
-    x.days_for_pcr = x.iso ? rand(1:2) : 999
+    x.isovia = via
 
 end
 function sample_epi_durations(y::Human)
@@ -1583,8 +1621,6 @@ function move_to_mild(x::Human)
         x.swap_status = MISO
         #x.swap = x.strain == 1 ? MISO : MISO2  
         x.exp = p.τmild
-        x.daysafterpositive = 0
-        x.positive = true
     end
 end
 export move_to_mild
@@ -1600,7 +1636,7 @@ function move_to_miso(x::Human)
     x.tis = 0 
     x.exp = x.dur[4] - p.τmild  ## since tau amount of days was already spent as infectious
     
-    _set_isolation(x, true, :mi) 
+    #_set_isolation(x, true, :mi) 
 end
 export move_to_miso
 
@@ -1726,8 +1762,6 @@ function move_to_inf(x::Human)
             aux_v = [IISO;IISO2;IISO3;IISO4;IISO5;IISO6]
             x.swap = aux_v[x.strain]
             x.swap_status = IISO
-            x.daysafterpositive = 0
-            x.positive = true
             #x.swap = x.strain == 1 ? IISO : IISO2
         else
             if rand() < mh[gg]*aux
@@ -1773,8 +1807,8 @@ function move_to_iiso(x::Human)
     end
     #x.swap = x.strain == 1 ? REC : REC2
     x.tis = 0     ## reset time in state 
-    x.exp = x.dur[4] - 1  ## since 1 day was spent as infectious
-    _set_isolation(x, true, :mi)
+    x.exp = x.dur[4] - τinf  ## since 1 day was spent as infectious
+    #_set_isolation(x, true, :mi)
 end 
 
 function move_to_hospicu(x::Human)   
