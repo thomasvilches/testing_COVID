@@ -561,6 +561,7 @@ function testing(grp,dayweek)
                 _set_isolation(x,false,:null)
                 x.nra = 0
                 x.positive = false
+                x.daysisolation = 999
             end
 
         else
@@ -615,6 +616,7 @@ function testing(grp,dayweek)
                     else
                         _set_isolation(x,false,:null)
                         x.nra = 0
+                        x.daysisolation = 999
                         x.positive = false
                     end
                 end
