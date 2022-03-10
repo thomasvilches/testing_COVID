@@ -57,7 +57,7 @@ Base.@kwdef mutable struct Human
     daysinf::Int64 = -1
     tookpcr::Bool = false
     nra::Int64 = 0
-    x.prcpp::Float64 = 0.0
+    pcrprob::Float64 = 0.0
 
 end
 
@@ -127,37 +127,37 @@ end
     time_sixth_strain::Int64 = 999 #when will the sixth strain introduced
     rel_trans_sixth::Float64 = 1.0
     sixth_strain_trans::Float64 = rel_trans_sixth*sec_strain_trans*fourth_strain_trans #transmissibility of sixth strain
-    reduction_sev_omicron::Float64 = 0.7 ##reduction of severity compared to Delta
+    reduction_sev_omicron::Float64 = 0.752 ##reduction of severity compared to Delta
 
     mortality_inc::Float64 = 1.3 #The mortality increase when infected by strain 2
 
     vaccine_proportion::Vector{Float64} = [0.59;0.33;0.08]
     vaccine_proportion_2::Vector{Float64} = [0.63;0.37;0.0]
     vac_period::Array{Int64,1} = [21;28;999]
+    
+    
+    #=------------ Vaccine Efficacy ----------------------------=#
     booster_after::Array{Int64,1} = [180;180;999]
-    booster_after_bkup::Array{Int64,1} = [120;120;999]
-    change_booster_eligibility::Int64 = 999
+    booster_after_bkup::Array{Int64,1} = [150;150;999]
+    change_booster_eligibility::Int64 = 490
     n_boosts::Int64 = 1
     time_first_to_booster::Int64 = 9999
     min_age_booster::Int64 = 16
     reduction_omicron::Float64 = 0.0
     reduction_reduction::Float64 = 0.0
     #=------------ Vaccine Efficacy ----------------------------=#
-    
-    #=------------ Vaccine Efficacy ----------------------------=#
-    days_to_protection::Array{Array{Array{Int64,1},1},1} = [[[14],[0;7]],[[14],[0;14]],[[14]]]
-    vac_efficacy_inf::Array{Array{Array{Array{Float64,1},1},1},1} = [[[[0.46],[0.6;0.861]],[[0.295],[0.6;0.895]],[[0.368],[0.48;0.736]],[[0.368],[0.48;0.64]],[[0.46],[0.6;0.861]],[[0.368],[0.48;0.64]]],
-    [[[0.61],[0.61,0.935]],[[0.56],[0.56,0.86]],[[0.488],[0.488;0.745]],[[0.496],[0.496,0.76]],[[0.61],[0.61,0.935]],[[0.496],[0.496,0.76]]],
+    days_to_protection::Array{Array{Array{Int64,1},1},1} = [[[14;21],[0;7]],[[14;21],[0;7]],[[14]]]
+    vac_efficacy_inf::Array{Array{Array{Array{Float64,1},1},1},1} = [[[[0.46;0.46],[0.46;0.861]],[[0.295;0.295],[0.295;0.895]],[[0.368;0.368],[0.368;0.75]],[[0.416;0.416],[0.416;0.85]],[[0.46;0.46],[0.46;0.861]],[[0.16;0.16],[0.16;0.33]]],#booster efficacy  for omicron changed in vac_time function
+    [[[0.843;0.843],[0.843,0.964]],[[0.901;0.901],[0.901,0.984]],[[0.67;0.67],[0.67;0.77]],[[0.77;0.77],[0.77,0.867]],[[0.843;0.843],[0.843,0.964]],[[0.16;0.16],[0.16,0.428]]],
     [[[0.61]],[[0.56]],[[0.488]],[[0.496]],[[0.61]],[[0.488]]]]#### 50:5:80
 
-    vac_efficacy_symp::Array{Array{Array{Array{Float64,1},1},1},1} = [[[[0.57],[0.66;0.94]],[[0.536],[0.62;0.937]],[[0.332],[0.66;0.94]],[[0.335],[0.62;0.88]],[[0.57],[0.66;0.94]],[[0.335],[0.62;0.88]]],
-    [[[0.921],[0.921,0.941]],[[0.88],[0.88,0.91]],[[0.332],[0.66;0.94]],[[0.68],[0.68,0.70]],[[0.921],[0.921,0.941]],[[0.68],[0.68,0.70]]], #### 50:5:80
+    vac_efficacy_symp::Array{Array{Array{Array{Float64,1},1},1},1} = [[[[0.63;0.65],[0.65;0.93]],[[0.67;0.7],[0.7;0.89]],[[0.64;0.68],[0.68;0.82]],[[0.57;0.59],[0.59;0.92]],[[0.63;0.65],[0.65;0.93]],[[0.616;0.616],[0.616;0.69]]], #booster efficacy  for omicronmchanged in vac_time function
+    [[[0.63;0.7],[0.7,0.96]],[[0.82;0.83],[0.83,0.92]],[[0.75;0.74],[0.74;0.89]],[[0.7;0.69],[0.69,0.95]],[[0.63;0.7],[0.7,0.96]],[[0.678;0.678],[0.678,0.69]]], #### 50:5:80
     [[[0.921]],[[0.88]],[[0.332]],[[0.68]],[[0.921]],[[0.332]]]] #### 50:5:80
     
-    vac_efficacy_sev::Array{Array{Array{Array{Float64,1},1},1},1} = [[[[0.62],[0.80;0.92]],[[0.541],[0.8;0.94]],[[0.34],[0.68;0.974]],[[0.34],[0.68;0.80]],[[0.62],[0.80;0.92]],[[0.34],[0.68;0.80]]],
-    [[[0.921],[0.921,1.0]],[[0.816],[0.816,0.957]],[[0.34],[0.68;0.974]],[[0.781],[0.781,0.916]],[[0.921],[0.921,1.0]],[[0.781],[0.781,0.916]]],#### 50:5:80
+    vac_efficacy_sev::Array{Array{Array{Array{Float64,1},1},1},1} = [[[[0.77;0.88],[0.88;0.98]],[[0.82;0.87],[0.87;0.96]],[[0.84;0.87],[0.87;0.96]],[[0.81;0.81],[0.81;0.97]],[[0.77;0.88],[0.88;0.98]],[[0.676;0.676],[0.676;0.81]]], #booster efficacy for omicron changed in vac_time function
+    [[[0.66;0.7],[0.7,0.97]],[[0.8;0.82],[0.82,0.95]],[[0.88;0.95],[0.95;0.95]],[[0.9;0.91],[0.91,0.98]],[[0.66;0.7],[0.7,0.97]],[[0.744;0.744],[0.744,0.81]]],#### 50:5:80
     [[[0.921]],[[0.816]],[[0.34]],[[0.781]],[[0.921]],[[0.34]]]]#### 50:5:80
-
 
     time_change_contact::Array{Int64,1} = [1;map(y-> 95+y,0:3);map(y->134+y,0:9);map(y->166+y,0:13);map(y->199+y,0:35)]
     change_rate_values::Array{Float64,1} = [1.0;map(y-> 1.0-0.01*y,1:4);map(y-> 0.96-(0.055/10)*y,1:10);map(y-> 0.90+(0.1/14)*y,1:14);map(y-> 1.0-(0.34/36)*y,1:36)]
@@ -183,17 +183,13 @@ end
     α2::Float64 = 0.0
     α3::Float64 = 1.0
     daysofvac::Int64 = 365### check it
-    doubledose::Int64 = 999
-    doubledose_kids::Int64 = 999
-    rate_dd_kids::Float64 = 2.0
-    booster_increase::Int64 = 999
-    increase_booster_rate::Float64 = 1.0
+    
 
     scenario::Symbol = :statuscuo
 
     #one waning rate for each efficacy? For each strain? I can change this structure based on that
 
-    waning::Int64 = 0
+    waning::Int64 = 1
     ### after calibration, how much do we want to increase the contact rate... in this case, to reach 70%
     ### 0.5*0.95 = 0.475, so we want to multiply this by 1.473684211
     proportion_contacts_workplace::Float64 = 0.0
@@ -438,7 +434,7 @@ function main(ip::ModelParameters,sim::Int64)
             time_pos += 1
         end
 
-        if time_prop < length(v_prop) && st == v_prop[time_prop]
+        if time_prop <= length(v_prop) && st == v_prop[time_prop]
             setfield!(p, :vaccine_proportion, fd_prop[time_prop,:])
             setfield!(p, :vaccine_proportion_2, sd_prop[time_prop,:])
             time_prop += 1
@@ -557,7 +553,7 @@ function testing(grp,dayweek)
     for x in humans
 
         if x.days_for_pcr == 0
-            if rand() > x.pcrpp
+            if rand() > x.pcrprob
                 _set_isolation(x,false,:null)
                 x.nra = 0
                 x.positive = false
@@ -594,7 +590,7 @@ function testing(grp,dayweek)
                         x.tookpcr = true
                         x.days_for_pcr = rand(1:2)
                         npcr+=1
-                        x.pcrpp = _get_prob_pcr(x)
+                        x.pcrprob = _get_prob_pcr(x)
                     end
                     
                 end
@@ -608,10 +604,10 @@ function testing(grp,dayweek)
                 x.nra += 1
                 nra+=1
                 if rand() > pp 
-                    if x.health_status in (MILD,MISO,INF,IISO)
+                    if x.health_status in (MILD,MISO,INF,IISO) || x.positive
                         x.tookpcr = true
                         x.days_for_pcr = rand(1:2)
-                        x.pcrpp = _get_prob_pcr(x)
+                        x.pcrprob = _get_prob_pcr(x)
                         npcr+=1
                     else
                         _set_isolation(x,false,:null)
@@ -630,7 +626,7 @@ function testing(grp,dayweek)
                     x.tookpcr = true
                     x.days_for_pcr = rand(1:2)
                     npcr+=1
-                    x.pcrpp = _get_prob_pcr(x)
+                    x.pcrprob = _get_prob_pcr(x)
                 end
             end
 
@@ -1090,13 +1086,18 @@ function _get_column_incidence(hmatrix, hcol)
     inth = Int(hcol)
     timevec = zeros(Int64, p.modeltime)
     for r in eachrow(hmatrix)
-        idx = findfirst(x -> x == inth, r)
-        if idx !== nothing 
-            timevec[idx] += 1
+        idx = findall(x-> r[x] == inth && r[x] != r[x-1],2:length(r))
+        idx = idx .+ 1
+        #idx = findfirst(x -> x == inth, r)
+        if idx !== nothing
+            for i in idx 
+                timevec[i] += 1
+            end
         end
     end
     return timevec
 end
+
 
 function herd_immu_dist_4(sim::Int64,strain::Int64)
     rng = MersenneTwister(200*sim)
@@ -1413,12 +1414,14 @@ function sample_epi_durations(y::Human)
     asy_dist = Gamma(5, 1)
     inf_dist = Gamma((3.2)^2/3.7, 3.7/3.2)
 
+    aux = y.vac_status > 1 || y.recovered ? p.reduce_days : 0
 
     latents = Int.(round.(rand(lat_dist)))
     pres = Int.(round.(rand(pre_dist)))
     latents = latents - pres # ofcourse substract from latents, the presymp periods
-    asymps = Int.(ceil.(rand(asy_dist)))
-    infs = Int.(ceil.(rand(inf_dist)))
+    asymps = max(Int.(ceil.(rand(asy_dist)))-aux,1)
+    infs = max(Int.(ceil.(rand(inf_dist)))-aux,1)
+
     return (latents, asymps, pres, infs)
 end
 
@@ -1692,24 +1695,27 @@ function move_to_inf(x::Human)
             h = x.comorbidity == 1 ? comh : 0.05*1.60*1 #0.376
             c = x.comorbidity == 1 ? 0.396*1.60 : 0.25*1.60
         end
-                
+        #= 
+        H. Scribner, Omicron variant leads to less severe symptoms, deaths, new study says. Deseret News (2021) (January 6, 2022).
+        UK Health Security Agency, “Technical briefing: Update on hospitalisation and vaccine effectiveness for Omicron VOC-21NOV-01 (B.1.1.529)” (2021).
+        C. M aslo, et al., Characteristics and Outcomes of Hospitalized Patients in South Africa During the COVID-19 Omicron Wave Compared With Previous Waves. JAMA (2021) https:/doi.org/10.1001/jama.2021.24868.
+        =#
         if x.strain == 4
             if !x.recovered && x.vac_status < 2
-                h = h*2.26 #https://www.thelancet.com/journals/laninf/article/PIIS1473-3099(21)00475-8/fulltext
+                h = h*2.65 #2.26 #https://www.thelancet.com/journals/laninf/article/PIIS1473-3099(21)00475-8/fulltext
             elseif x.recovered || x.boosted #for booster, it is an assumption
-                h = h/6.7 #https://www.medrxiv.org/content/10.1101/2021.08.24.21262415v1
+                h = h/p.hosp_red #
             end
         elseif x.strain == 6
-            #https://www.deseret.com/coronavirus/2021/12/31/22861222/omicron-variant-less-severe-covid-symptoms-deaths
-            #https://jamanetwork.com/journals/jama/fullarticle/2787776?guestAccessKey=919da83d-b6f9-4e05-8de1-05cca4541a59&utm_source=silverchair&utm_medium=email&utm_campaign=article_alert-jama&utm_content=olf&utm_term=123021
-            h = h*(1-p.reduction_sev_omicron) # 0.7
-            c = c*(1-0.36)#https://jamanetwork.com/journals/jama/fullarticle/2787776?guestAccessKey=919da83d-b6f9-4e05-8de1-05cca4541a59&utm_source=silverchair&utm_medium=email&utm_campaign=article_alert-jama&utm_content=olf&utm_term=123021
+
+            h = h*(1-0.3*p.reduction_sev_omicron) # 0.7
+            c = c*(1-0.381)#
             if x.recovered || x.boosted #for booster, it is an assumption
-                h = h/6.7 #https://www.medrxiv.org/content/10.1101/2021.08.24.21262415v1
+                h = h/p.hosp_red
             end
         elseif x.strain == 2
             if x.recovered || x.boosted #for booster, it is an assumption
-                h = h/6.7 #https://www.medrxiv.org/content/10.1101/2021.08.24.21262415v1
+                h = h/p.hosp_red 
             end
         else
             error("in hospitalization")
@@ -1752,15 +1758,10 @@ function move_to_inf(x::Human)
         end
        
     else ## no hospital for this lucky (but severe) individual 
-        aux = (p.mortality_inc^Int(x.strain==2 || x.strain == 4))
-        aux = 0#x.strain == 4 || x.strain == 6 ? aux*0.0 : aux
-        if x.iso 
-            x.exp = τinf  ## 1 day isolation for severe cases 
-            aux_v = [IISO;IISO2;IISO3;IISO4;IISO5;IISO6]
-            x.swap = aux_v[x.strain]
-            x.swap_status = IISO
-        elseif rand() < p.fsevere 
-            x.exp = τinf  ## 1 day isolation for severe cases 
+        aux = 0.0#(p.mortality_inc^Int(x.strain==2 || x.strain == 4))
+        #aux = x.strain == 4 || x.strain == 6 ? aux*0.0 : aux
+        if x.iso || rand() < p.fsevere 
+            x.exp = p.τsevere  ## 1 day isolation for severe cases 
             aux_v = [IISO;IISO2;IISO3;IISO4;IISO5;IISO6]
             x.swap = aux_v[x.strain]
             x.swap_status = IISO
@@ -1793,8 +1794,8 @@ function move_to_iiso(x::Human)
     gg = findfirst(y-> x.age in y,groups)
     
     mh = [0.0002; 0.0015; 0.011; 0.0802; 0.381] # death rate for severe cases.
-    aux = (p.mortality_inc^Int(x.strain==2 || x.strain == 4))
-    aux = 0#x.strain == 4 || x.strain == 6 ? aux*0.0 : aux
+    aux = 0.0#(p.mortality_inc^Int(x.strain==2 || x.strain == 4))
+    #aux = x.strain == 4 || x.strain == 6 ? aux*0.0 : aux
 
     if rand() < mh[gg]*aux
         x.exp = x.dur[4] 
@@ -1809,8 +1810,8 @@ function move_to_iiso(x::Human)
     end
     #x.swap = x.strain == 1 ? REC : REC2
     x.tis = 0     ## reset time in state 
-    x.exp = x.dur[4] - τinf  ## since 1 day was spent as infectious
-    #_set_isolation(x, true, :mi)
+    x.exp = x.dur[4] - 1  ## since 1 day was spent as infectious
+    _set_isolation(x, true, :mi)
 end 
 
 function move_to_hospicu(x::Human)   
@@ -1828,21 +1829,18 @@ function move_to_hospicu(x::Human)
 
     elseif x.strain == 2  || x.strain == 4  || x.strain == 6
     
-        mh = 0.5*[0.0016, 0.0016, 0.0025, 0.0107, 0.02, 0.038, 0.15, 0.66]
-        mc = 0.5*[0.0033, 0.0033, 0.0036, 0.0131, 0.022, 0.04, 0.2, 0.70]
+        mh = 0.7*[0.0016, 0.0016, 0.0025, 0.0107, 0.02, 0.038, 0.15, 0.66]
+        mc = 0.7*[0.0033, 0.0033, 0.0036, 0.0131, 0.022, 0.04, 0.2, 0.70]
         
         if x.strain == 4
-            mh = 1.0*mh
-            mc = 1.0*mc
+            mh = 0.75*mh
+            mc = 0.75*mc
         elseif x.strain == 6
-            #https://www.ijidonline.com/action/showPdf?pii=S1201-9712%2821%2901256-X
-            # 70% -> reduction
-            mh = (1-p.reduction_sev_omicron)*mh
-            mc = (1-p.reduction_sev_omicron)*mc
+            mh = (1-0.9*p.reduction_sev_omicron)*mh
+            mc = (1-0.9*p.reduction_sev_omicron)*mc
         end
 
     else
-      
             error("No strain - hospicu")
     end
     
@@ -1858,7 +1856,8 @@ function move_to_hospicu(x::Human)
     x.health_status = x.swap_status
     x.swap = UNDEF
     x.tis = 0
- 
+    _set_isolation(x, true) # do not set the isovia property here.  
+
     if swaphealth == HOS
         x.hospicu = 1 
         if rand() < mh[gg] ## person will die in the hospital 

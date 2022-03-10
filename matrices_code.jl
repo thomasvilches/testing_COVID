@@ -7,7 +7,7 @@ function days_vac_f(l::Int64)
 end
 
 function vaccination_rate_1(sim::Int64)
-    
+    #must be written as the temporal series of vaccines per age group
     if p.prov == :canada
         #p.day_inital_vac = 104
         v = [0 0 0 0 0 0 0 0 0
@@ -443,6 +443,7 @@ function vaccination_rate_1(sim::Int64)
 end
 
 function vaccination_rate_2(sim::Int64)
+    #must be written as the temporal series of vaccines per age group
     
     
     if p.prov == :canada
@@ -1427,6 +1428,7 @@ function booster_doses()
 end
 
 function vector_probs()
+    #this must be written as the reverse vector of incidence
     if p.prov == :canada
         v = [
                 0.00834791519976576
@@ -2268,7 +2270,7 @@ function distribute_vaccine(M1,M2,B)
     end #end for age breaks
     
 
-    ### know I want to distribute booster
+    ### now I want to distribute booster
     Baux = reverse(B)
     for i = 1:length(Baux)
         pos = findall(y-> y.vac_status == 2 && y.boosted == 0 && y.days_vac >= p.booster_after[y.vaccine_n]+(i-1) && y.age >= p.min_age_booster,humans)
