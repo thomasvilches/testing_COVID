@@ -16,3 +16,7 @@
   - DONE
 
 # **CARE: daysofvac**
+
+# Care: infection process of recovered > 90
+
+question: general population always isolate?

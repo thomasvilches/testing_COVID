@@ -52,13 +52,14 @@ Base.@kwdef mutable struct Human
     #### for testing
 
     daysisolation::Int64 = 999
+    days_after_detection::Int64 = 999
     positive::Bool = false
     days_for_pcr::Int64 = -1
-    daysinf::Int64 = -1
+    daysinf::Int64 = 999
     tookpcr::Bool = false
     nra::Int64 = 0
     pcrprob::Float64 = 0.0
-
+    test::Bool = false
 end
 
 ## default system parameters
@@ -199,7 +200,7 @@ end
     initial_day_week::Int64 = 1 # 1- Monday ... 7- Sunday
     testing_days::Vector{Int64} = [2;4;6]
     days_ex_test::Int64 = 90 ## 3 months without testing
-    isolation_test_days::Int64 = 10 #how many days of isolation after testing
+    isolation_days::Int64 = 5 #how many days of isolation after testing
     days_for_ra::Int64 = 2
 end
 
@@ -550,91 +551,102 @@ function testing(grp,dayweek)
     npcr::Int64 = 0
     nra::Int64 = 0
 
-    for x in humans
-
-        if x.days_for_pcr == 0
-            if rand() > x.pcrprob
-                _set_isolation(x,false,:null)
-                x.nra = 0
-                x.positive = false
-                x.daysisolation = 999
-            end
-
-        else
+    if p.scenariotest == 1
+        for x in humans[grp]
             x.days_for_pcr -= 1
-        end
-
-        if x.iso && x.daysisolation >= x.isolation_test_days && !(x.health_status in (HOS,ICU,DED))
-            _set_isolation(x,false,:null)
-            x.nra = 0
-            x.positive = false
-        end
-        
-        if x.nra == 0
-            if x.health_status in (MILD,MISO,INF,IISO)
-                x.daysisolation = 0
-                pp = _get_prob_ra(x)
-                if rand() < pp
-                    x.positive = true
-                end
-                x.nra += 1
-                nra+=1
-                _set_isolation(x,true,:symptoms)
-            elseif dayweek in p.testing_days && x.daysisolation > p.days_ex_test && x.idx in grp
-                pp = _get_prob_ra(x)
-                if rand() < pp
-                    x.daysisolation = 0
-                    x.positive = true
-                    _set_isolation(x,true,:test)
-                    if p.scenariotest == 1
-                        x.tookpcr = true
-                        x.days_for_pcr = rand(1:2)
-                        npcr+=1
-                        x.pcrprob = _get_prob_pcr(x)
-                    end
-                    
-                end
-                x.nra += 1
-                nra += 1
+            if x.isovia == :symp
                 
-            end
-        elseif x.nra == 1
-            if x.isovia == :symptoms && x.daysisolation >= p.days_for_ra
-                pp = _get_prob_ra(x)
-                x.nra += 1
-                nra+=1
-                if rand() > pp 
-                    if x.health_status in (MILD,MISO,INF,IISO) || x.positive
-                        x.tookpcr = true
-                        x.days_for_pcr = rand(1:2)
-                        x.pcrprob = _get_prob_pcr(x)
-                        npcr+=1
-                    else
-                        _set_isolation(x,false,:null)
-                        x.nra = 0
-                        x.daysisolation = 999
-                        x.positive = false
-                    end
-                end
-                
-            elseif p.scenariotest == 2 && x.isovia == :test && x.daysisolation >= p.days_for_ra
-
-                pp = _get_prob_ra(x)
-                x.nra += 1
-                nra+=1
-                if rand() > pp 
-                    x.tookpcr = true
+                if x.daysisolation == 0
                     x.days_for_pcr = rand(1:2)
                     npcr+=1
                     x.pcrprob = _get_prob_pcr(x)
+                    x.tookpcr = true
+                elseif x.days_for_pcr == 0
+                    if rand() > x.pcrprob
+                        x.daysisolation = 999
+                        x.tookpcr = false
+                    end
                 end
             end
-
-
         end
+    elseif p.scenariotest == 2
+        for x in humans
+            x.days_for_pcr -= 1
+            if x.isovia == :symp
+                
+                if !x.tookpcr#x.daysisolation == 0
+                    x.days_for_pcr = rand(1:2)
+                    npcr+=1
+                    x.pcrprob = _get_prob_pcr(x)
+                    x.tookpcr = true
+                elseif x.days_for_pcr == 0
+                    if rand() > x.pcrprob
+                        x.daysisolation = 999
+                        x.tookpcr = false
+                    end
+                end
+            elseif x.test
+                if dayweek in p.testing_days && x.days_after_detection > p.days_ex_test
+                    pp = _get_prob_ra(x)
+                    if rand() < pp
+                        
+                        x.positive = true
+                        _set_isolation(x,true,:test)
+                        
+                        x.tookpcr = true
+                        x.days_for_pcr = rand(1:2)
+                        npcr+=1
+                        x.pcrprob = _get_prob_pcr(x)
+                    
+                        
+                    end
+                    x.nra += 1
+                    nra += 1
 
-
+                elseif x.days_for_pcr == 0
+                    if rand() > x.pcrprob
+                        x.daysisolation = 999
+                        x.tookpcr = false
+                    end
+                end
+            end
+        end
+    elseif p.scenariotest == 3
+        for x in humans
+            x.days_for_pcr -= 1
+            if x.isovia == :symp
+                
+                if !x.tookpcr#x.daysisolation == 0
+                    x.days_for_pcr = rand(1:2)
+                    npcr+=1
+                    x.pcrprob = _get_prob_pcr(x)
+                    x.tookpcr = true
+                elseif x.days_for_pcr == 0
+                    if rand() > x.pcrprob
+                        x.daysisolation = 999
+                        x.tookpcr = false
+                    end
+                end
+            
+            end
+        end
+    elseif p.scenariotest == 4
+        for x in humans
+            x.days_for_pcr -= 1
+            if x.isovia == :symp
+                
+                pp = _get_prob_ra(x)
+                if rand() < pp
+                    x.positive = true
+                    _set_isolation(x,true,:test)
+                end
+            
+            end
+        end
+    else
+        error("no scenario")
     end
+
 
     return nra,npcr
 end
@@ -1315,11 +1327,13 @@ function time_update()
     for x in humans 
         x.tis += 1 
         x.doi += 1 # increase day of infection. variable is garbage until person is latent
-        if x.daysinf >= 0 
-            x.daysinf += 1
-        end
-        if x.recovered 
-            x.days_recovered += 1
+         
+        x.daysinf += 1
+        x.days_recovered += 1 # We don't care about this up to the recovery
+        
+        if x.iso && x.daysisolation >= x.isolation_days && !(x.health_status in (HOS,ICU,DED))
+            _set_isolation(x,false,:null)
+            x.positive = false
         end
         if x.tis >= x.exp             
             @match Symbol(x.swap_status) begin
@@ -1392,8 +1406,15 @@ export time_update
     # a person could be isolated in mild/severe phase through fmild, fsevere
     # --> if x.iso == true from CT and x.isovia == :ct, do not overwrite
     # --> if x.iso == true from PRE and x.isovia == :pi, do not overwrite
-    x.iso = iso 
-    x.isovia = via
+    if x.isovia == :null
+        x.iso = iso 
+        x.isovia = via
+        x.daysisolation = 0
+        x.days_after_detection = 0
+    elseif !iso
+        x.iso = iso 
+        x.isovia = via
+    end
 
 end
 function sample_epi_durations(y::Human)
@@ -1438,10 +1459,11 @@ function move_to_latent(x::Human)
     age_thres = [4, 19, 49, 64, 79, 999]
     g = findfirst(y-> y >= x.age, age_thres)
 
-    index = Int(floor(x.days_recovered/7))
+    
     aux_red = 0.0
 
     if x.recovered
+        index = Int(floor(x.days_recovered/7))
         if x.recvac == 1
 
             if index > 0
@@ -1611,8 +1633,7 @@ function move_to_mild(x::Human)
     # how many days as full contacts before self-isolation
     # NOTE: if need to count non-isolated mild people, this is overestimate as isolated people should really be in MISO all the time
     #   and not go through the mild compartment 
-    aux = x.vac_status > 0 ? p.fmild*p.red_risk_perc : p.fmild
-
+    
     if x.iso
         aux_v = [MISO;MISO2;MISO3;MISO4;MISO5;MISO6]
         x.swap = aux_v[x.strain]
@@ -1620,7 +1641,7 @@ function move_to_mild(x::Human)
         #x.swap = x.strain == 1 ? MISO : MISO2  
         x.exp = p.τmild
         
-    elseif rand() < aux#p.fmild
+    elseif rand() < p.fmild
         aux_v = [MISO;MISO2;MISO3;MISO4;MISO5;MISO6]
         x.swap = aux_v[x.strain]
         x.swap_status = MISO
@@ -1641,7 +1662,8 @@ function move_to_miso(x::Human)
     x.tis = 0 
     x.exp = x.dur[4] - p.τmild  ## since tau amount of days was already spent as infectious
     
-    #_set_isolation(x, true, :mi) 
+    _set_isolation(x, true, :symp)
+   
 end
 export move_to_miso
 
@@ -1729,12 +1751,6 @@ function move_to_inf(x::Human)
 
     mh = [0.0002; 0.0015; 0.011; 0.0802; 0.381] # death rate for severe cases.
    
-    ###prop/(prob de sintoma severo)
-    if p.calibration && !p.calibration2
-        h =  0#, 0, 0, 0)
-        c =  0#, 0, 0, 0)
-        mh = (0, 0, 0, 0, 0)
-    end
 
     time_to_hospital = Int(round(rand(Uniform(2, 5)))) # duration symptom onset to hospitalization
    	
@@ -1778,9 +1794,7 @@ function move_to_inf(x::Human)
                 x.swap = aux_v[x.strain]
                 x.swap_status = REC
             end
-
         end  
-       
     end
     ## before returning, check if swap is set 
     x.swap == UNDEF && error("agent I -> ?")
@@ -1810,8 +1824,9 @@ function move_to_iiso(x::Human)
     end
     #x.swap = x.strain == 1 ? REC : REC2
     x.tis = 0     ## reset time in state 
-    x.exp = x.dur[4] - 1  ## since 1 day was spent as infectious
-    _set_isolation(x, true, :mi)
+    x.exp = x.dur[4] - τinf  ## since 1 day was spent as infectious
+    _set_isolation(x, true, :symp)
+    
 end 
 
 function move_to_hospicu(x::Human)   
@@ -1856,7 +1871,7 @@ function move_to_hospicu(x::Human)
     x.health_status = x.swap_status
     x.swap = UNDEF
     x.tis = 0
-    _set_isolation(x, true) # do not set the isovia property here.  
+    _set_isolation(x, true, :hosp) # do not set the isovia property here.  
 
     if swaphealth == HOS
         x.hospicu = 1 
@@ -1913,7 +1928,6 @@ end
 function move_to_recovered(h::Human)
     h.health = h.swap
     h.health_status = h.swap_status
-
     
     h.recovered = true
     h.days_recovered = 0
@@ -1924,7 +1938,7 @@ function move_to_recovered(h::Human)
     h.exp = 999 ## stay recovered indefinitely
     #h.iso = false ## a recovered person has ability to meet others
     h.recvac = 1
-    h.daysinf = -1
+    h.daysinf = 999
     
     #_set_isolation(h, false)  # do not set the isovia property here.  
     # isolation property has no effect in contact dynamics anyways (unless x == SUS)
