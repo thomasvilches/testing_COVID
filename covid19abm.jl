@@ -67,7 +67,7 @@ end
     β = 0.0345       
     seasonal::Bool = false ## seasonal betas or not
     popsize::Int64 = 100000
-    prov::Symbol = :canada
+    prov::Symbol = :ontario
     calibration::Bool = false
     calibration2::Bool = false 
     start_several_inf::Bool = true
@@ -132,15 +132,15 @@ end
 
     mortality_inc::Float64 = 1.3 #The mortality increase when infected by strain 2
 
-    vaccine_proportion::Vector{Float64} = [0.59;0.33;0.08]
-    vaccine_proportion_2::Vector{Float64} = [0.63;0.37;0.0]
+    vaccine_proportion::Vector{Float64} = [0.78; 0.22; 0.0]
+    vaccine_proportion_2::Vector{Float64} = [0.78; 0.22; 0.0]
     vac_period::Array{Int64,1} = [21;28;999]
     
     
     #=------------ Vaccine Efficacy ----------------------------=#
     booster_after::Array{Int64,1} = [180;180;999]
     booster_after_bkup::Array{Int64,1} = [150;150;999]
-    change_booster_eligibility::Int64 = 490
+    change_booster_eligibility::Int64 = 999
     n_boosts::Int64 = 1
     time_first_to_booster::Int64 = 9999
     min_age_booster::Int64 = 16
@@ -180,9 +180,6 @@ end
     time_vac_kids2::Int64 = 428
     using_jj::Bool = false
 
-    α::Float64 = 1.0
-    α2::Float64 = 0.0
-    α3::Float64 = 1.0
     daysofvac::Int64 = 365### check it
     
 
@@ -201,7 +198,7 @@ end
     testing_days::Vector{Int64} = [2;4;6]
     days_ex_test::Int64 = 90 ## 3 months without testing
     isolation_days::Int64 = 5 #how many days of isolation after testing
-    days_for_ra::Int64 = 2
+    test_ra::Int64 = 0 #1 - PCR, 2 - Abbott_PanBio 3 - 	BTNX_Rapid_Response	4 - Artron
 end
 
 Base.@kwdef mutable struct ct_data_collect
@@ -559,7 +556,7 @@ function testing(grp,dayweek)
                 if x.daysisolation == 0
                     x.days_for_pcr = rand(1:2)
                     npcr+=1
-                    x.pcrprob = _get_prob_pcr(x)
+                    x.pcrprob = _get_prob_test(x,1)
                     x.tookpcr = true
                 elseif x.days_for_pcr == 0
                     if rand() > x.pcrprob
@@ -577,7 +574,7 @@ function testing(grp,dayweek)
                 if !x.tookpcr#x.daysisolation == 0
                     x.days_for_pcr = rand(1:2)
                     npcr+=1
-                    x.pcrprob = _get_prob_pcr(x)
+                    x.pcrprob = _get_prob_test(x,1)
                     x.tookpcr = true
                 elseif x.days_for_pcr == 0
                     if rand() > x.pcrprob
@@ -587,7 +584,7 @@ function testing(grp,dayweek)
                 end
             elseif x.test
                 if dayweek in p.testing_days && x.days_after_detection > p.days_ex_test
-                    pp = _get_prob_ra(x)
+                    pp = _get_prob_test(x,p.test_ra)
                     if rand() < pp
                         
                         x.positive = true
@@ -596,7 +593,7 @@ function testing(grp,dayweek)
                         x.tookpcr = true
                         x.days_for_pcr = rand(1:2)
                         npcr+=1
-                        x.pcrprob = _get_prob_pcr(x)
+                        x.pcrprob = _get_prob_test(x,1)
                     
                         
                     end
@@ -619,7 +616,7 @@ function testing(grp,dayweek)
                 if !x.tookpcr#x.daysisolation == 0
                     x.days_for_pcr = rand(1:2)
                     npcr+=1
-                    x.pcrprob = _get_prob_pcr(x)
+                    x.pcrprob = _get_prob_test(x,1)
                     x.tookpcr = true
                 elseif x.days_for_pcr == 0
                     if rand() > x.pcrprob
@@ -635,7 +632,7 @@ function testing(grp,dayweek)
             x.days_for_pcr -= 1
             if x.isovia == :symp
                 
-                pp = _get_prob_ra(x)
+                pp = _get_prob_test(x,p.test_ra)
                 if rand() < pp
                     x.positive = true
                     _set_isolation(x,true,:test)
@@ -1330,7 +1327,8 @@ function time_update()
          
         x.daysinf += 1
         x.days_recovered += 1 # We don't care about this up to the recovery
-        
+        x.days_after_detection += 1 #we don't care about this untill the individual is detected
+
         if x.iso && x.daysisolation >= x.isolation_days && !(x.health_status in (HOS,ICU,DED))
             _set_isolation(x,false,:null)
             x.positive = false
