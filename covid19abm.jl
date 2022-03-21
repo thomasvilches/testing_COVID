@@ -1,4 +1,4 @@
-module covid19abm
+#module covid19abm
 using Base
 using Parameters, Distributions, StatsBase, StaticArrays, Random, Match, DataFrames
 @enum HEALTH SUS LAT PRE ASYMP MILD MISO INF IISO HOS ICU REC DED  LAT2 PRE2 ASYMP2 MILD2 MISO2 INF2 IISO2 HOS2 ICU2 REC2 DED2 LAT3 PRE3 ASYMP3 MILD3 MISO3 INF3 IISO3 HOS3 ICU3 REC3 DED3 LAT4 PRE4 ASYMP4 MILD4 MISO4 INF4 IISO4 HOS4 ICU4 REC4 DED4 LAT5 PRE5 ASYMP5 MILD5 MISO5 INF5 IISO5 HOS5 ICU5 REC5 DED5 LAT6 PRE6 ASYMP6 MILD6 MISO6 INF6 IISO6 HOS6 ICU6 REC6 DED6 UNDEF
@@ -60,6 +60,7 @@ Base.@kwdef mutable struct Human
     nra::Int64 = 0
     pcrprob::Float64 = 0.0
     test::Bool = false
+    
 end
 
 ## default system parameters
@@ -88,6 +89,8 @@ end
     herd::Int8 = 0 #typemax(Int32) ~ millions
     file_index::Int16 = 0
     nstrains::Int16 = 6
+    strain::Int64 = 1 ## which strain is spreading
+    strain_test::Int64 = 1 #position of the tuple
     
     #the cap for coverage should be 90% for 65+; 95% for HCW; 80% for 50-64; 60% for 16-49; and then 50% for 12-15 (starting from June 1).
     #comor_comp::Float64 = 0.7 #prop comorbidade tomam
@@ -186,7 +189,7 @@ end
     scenario::Symbol = :statuscuo
 
     #one waning rate for each efficacy? For each strain? I can change this structure based on that
-
+    reduce_days::Int64 = 0
     waning::Int64 = 1
     ### after calibration, how much do we want to increase the contact rate... in this case, to reach 70%
     ### 0.5*0.95 = 0.475, so we want to multiply this by 1.473684211
@@ -199,6 +202,9 @@ end
     days_ex_test::Int64 = 90 ## 3 months without testing
     isolation_days::Int64 = 5 #how many days of isolation after testing
     test_ra::Int64 = 0 #1 - PCR, 2 - Abbott_PanBio 3 - 	BTNX_Rapid_Response	4 - Artron
+    scenariotest::Int64 = 0
+    prop_risk::Float64 = 0.3 ##proportion of workplaces at risk
+    size_threshold::Int64 = 100
 end
 
 Base.@kwdef mutable struct ct_data_collect
@@ -320,6 +326,9 @@ function main(ip::ModelParameters,sim::Int64)
     hmatrix = zeros(Int16, p.popsize, p.modeltime)
     initialize() # initialize population
     
+    v_strain = [1;4;6]
+    p.strain_test = findfirst(x-> x == p.strain,v_strain)
+
     vac_rate_1::Matrix{Int64} = vaccination_rate_1(sim)
     vac_rate_2::Matrix{Int64} = vaccination_rate_2(sim)
     vac_rate_booster::Vector{Int64} = booster_doses()
@@ -331,35 +340,24 @@ function main(ip::ModelParameters,sim::Int64)
     #h_init::Int64 = 0
     # insert initial infected agents into the model
     # and setup the right swap function. 
-   
-    N = herd_immu_dist_4(sim,1)
-    if p.initialinf > 0
-        insert_infected(PRE, p.initialinf, 4, 1)[1]
-    end
-        #findall(x->x.health in (MILD,INF,LAT,PRE,ASYMP),humans)
-   
-    h_init1 = findall(x->x.health  in (LAT,MILD,MISO,INF,PRE,ASYMP),humans)
-    h_init1 = [h_init1]
-    h_init2 = []
-    h_init3 = []
-    h_init4 = []
+
+
+    herd_immu_dist_4(sim,1)
+    distribute_vaccine(vac_rate_1,vac_rate_2,vac_rate_booster)
+    insert_infected(PRE, p.initialinf, 4, ip.strain)[1]
+    
     ## save the preisolation isolation parameters
-    _fpreiso = p.fpreiso
-    p.fpreiso = 0
+   
 
     # split population in agegroups 
     grps = get_ag_dist()
     workplaces = create_workplace()
-    schools = create_schools()
-    count_change::Int64 = 1
+    #schools = create_schools()
     
     time_vac::Int64 = 1
-    time_pos::Int64 = 0
-    time_prop::Int64 = 1
     remaining_doses::Int64 = 0
     total_given::Int64 = 0
-    count_relax::Int64 = 1
-
+    
     initial_dw::Int64 = p.initial_day_week
 
     unvac_rec::Vector{Int64} = zeros(Int64,p.modeltime)
@@ -368,102 +366,25 @@ function main(ip::ModelParameters,sim::Int64)
     vac_2::Vector{Int64} = zeros(Int64,p.modeltime)
     vac_3::Vector{Int64} = zeros(Int64,p.modeltime)
 
-    testing_group::Int64 = select_testing_group()
+    testing_group::Vector{Int64} = select_testing_group(workplaces)
   
 
+    ##fix it here
     if p.vaccinating
         vac_ind::Vector{Vector{Int64}} = vac_selection(sim,5,agebraks_vac)
     else
         time_vac = 9999 #this guarantees that no one will be vaccinated
     end
+
+    
     # start the time loop
     for st = 1:p.modeltime
-        if p.ins_sec_strain && st == p.time_sec_strain ##insert second strain
-            insert_infected(PRE, p.initialinf2, 4, 2)[1]
-            h_init2 = findall(x->x.health  in (LAT2,MILD2,INF2,PRE2,ASYMP2),humans)
-            h_init2 = [h_init2]
-        end
-        if p.ins_third_strain && st == p.time_third_strain #insert third strain
-            insert_infected(PRE, p.initialinf3, 4, 3)[1]
-            h_init3 = findall(x->x.health  in (LAT3,MILD3,INF3,PRE3,ASYMP3),humans)
-            h_init3 = [h_init3]
-        end
-        if p.ins_fourth_strain && st == p.time_fourth_strain #insert third strain
-            insert_infected(PRE, p.initialinf4, 4, 4)[1]
-            h_init4 = findall(x->x.health  in (LAT4,MILD4,INF4,PRE4,ASYMP4),humans)
-            h_init4 = [h_init4]
-        end
-        if p.ins_fifth_strain && st == p.time_fifth_strain #insert third strain
-            insert_infected(PRE, p.initialinf5, 4, 5)[1]
-        end
-        if p.ins_sixth_strain && st == p.time_sixth_strain #insert third strain
-            insert_infected(PRE, p.initialinf6, 4, 6)[1]
-        end
+        #= 
         if length(p.time_change_contact) >= count_change && p.time_change_contact[count_change] == st ###change contact pattern throughout the time
             setfield!(p, :contact_change_rate, p.change_rate_values[count_change])
             count_change += 1
         end
-
-        if p.vaccinating
-            if st == p.time_vac_kids
-                vac_ind = vac_selection(sim,12,agebraks_vac)
-            elseif st == p.time_vac_kids2
-                vac_ind = vac_selection(sim,5,agebraks_vac)
-            
-            end
-        end 
-
-        if st == p.change_booster_eligibility
-            p.booster_after = deepcopy(p.booster_after_bkup)
-        end
-        # start of day
-        #println("$st")
-
-        if st == p.relaxing_time ### time that people vaccinated people is allowed to go back to normal
-            setfield!(p, :relaxed, true)
-        end
-        if st >= p.time_back_to_normal && count_relax <= p.relax_over
-            #setfield!(p, :contact_change_2, p.contact_change_2+p.relax_rate)
-            p.contact_change_2 += p.relax_rate
-            count_relax += 1
-        end
-
-        if time_pos < length(vaccination_days) && time_vac == vaccination_days[time_pos+1]
-            time_pos += 1
-        end
-
-        if time_prop <= length(v_prop) && st == v_prop[time_prop]
-            setfield!(p, :vaccine_proportion, fd_prop[time_prop,:])
-            setfield!(p, :vaccine_proportion_2, sd_prop[time_prop,:])
-            time_prop += 1
-        end
-
-        #= if p.vaccinating && st == p.time_vac_kids 
-            vac_ind = vac_selection(sim,12,agebraks_vac)
-        end =#
-
-        time_vac += 1
-        if time_pos > 0 
-            if st >= p.time_first_to_booster
-                vac_rate_booster[time_pos+1] += sum(vac_rate_1[time_pos+1,:])
-                vac_rate_1[time_pos+1,:] .= 0
-            end
-            aux_ =  vac_time!(sim,vac_ind,time_pos+1,vac_rate_1,vac_rate_2,vac_rate_booster)
-            remaining_doses += aux_[1]
-            total_given += aux_[2]
-        end
-
-        #auxx = findall(x-> x.vac_status > 0,humans)
-        
-       #=  if length(auxx) > 0
-            aa = sum([humans[x].vac_status for x in auxx]) 
-            if aa != total_given
-                println("$st $(time_pos+1) erro $total_given $aa")
-            end
-        end =#
-
-        #println([time_vac length(findall(x-> x.vac_status == 2 && x.age >= 18,humans))])
-       
+        =#
         testing(testing_group,initial_dw)
         _get_model_state(st, hmatrix) ## this datacollection needs to be at the start of the for loop
         dyntrans(st, grps,workplaces,schools,initial_dw,sim)
@@ -533,10 +454,25 @@ function create_workplace()
     return samples
 end 
 
-function select_testing_group()
+function select_testing_group(workplaces::Vector{Vector{Int64}})
     ### we can change this function to implement different test strategies
-    grp = findall(y-> y.age in 12:65,humans)
-
+    if p.scenariotest == 1
+        
+        wpr = findall(x-> length(x) >= p.size_threshold,workplaces)
+        grp = vcat(workplaces[wpr]...)
+    elseif p.scenariotest == 2
+        wpr = findall(x-> length(x) >= p.size_threshold,workplaces)
+        grp = vcat(workplaces[wpr]...)
+    elseif p.scenariotest == 3
+        grp = 1:length(humans)
+    elseif p.scenariotest == 4
+        grp = 1:length(humans)
+    elseif p.scenariotest == 0
+        grp = []
+    else
+        error("error in testing group")
+    end
+    
     for i in grp
         humans[i].test = true
     end
@@ -599,7 +535,6 @@ function testing(grp,dayweek)
                     end
                     x.nra += 1
                     nra += 1
-
                 elseif x.days_for_pcr == 0
                     if rand() > x.pcrprob
                         x.daysisolation = 999
@@ -640,6 +575,8 @@ function testing(grp,dayweek)
             
             end
         end
+    elseif p.scenariotest == 0
+
     else
         error("no scenario")
     end
@@ -1180,7 +1117,7 @@ export _collectdf, _get_incidence_and_prev, _get_column_incidence, _get_column_p
 ## initialization functions 
 function get_province_ag(prov) 
     ret = @match prov begin
-        :alberta => Distributions.Categorical(@SVector [0.0655, 0.1851, 0.4331, 0.1933, 0.1230])
+       #= :alberta => Distributions.Categorical(@SVector [0.0655, 0.1851, 0.4331, 0.1933, 0.1230])
         :bc => Distributions.Categorical(@SVector [0.0475, 0.1570, 0.3905, 0.2223, 0.1827])
         :manitoba => Distributions.Categorical(@SVector [0.0634, 0.1918, 0.3899, 0.1993, 0.1556])
         :newbruns => Distributions.Categorical(@SVector [0.0460, 0.1563, 0.3565, 0.2421, 0.1991])
@@ -1192,8 +1129,8 @@ function get_province_ag(prov)
         :quebec => Distributions.Categorical(@SVector [0.0545, 0.1615, 0.3782, 0.2227, 0.1831])
         :saskat => Distributions.Categorical(@SVector [0.0666, 0.1914, 0.3871, 0.1997, 0.1552])
         :yukon => Distributions.Categorical(@SVector [0.0597, 0.1694, 0.4179, 0.2343, 0.1187])
-        :ontario => Distributions.Categorical(@SVector [0.0519, 0.1727, 0.3930, 0.2150, 0.1674])
-        :newyorkcity   => Distributions.Categorical(@SVector [0.064000, 0.163000, 0.448000, 0.181000, 0.144000])
+        :newyorkcity   => Distributions.Categorical(@SVector [0.064000, 0.163000, 0.448000, 0.181000, 0.144000])=#
+        :ontario => Distributions.Categorical(@SVector [0.04807822, 0.10498712, 0.12470340, 0.14498051, 0.13137129, 0.12679091, 0.13804896, 0.10292032, 0.05484776, 0.02327152])
         :canada => Distributions.Categorical(@SVector [0.04922255,0.10812899,0.11792442,0.13956709,0.13534216,0.12589012,0.13876094,0.10687438,0.05550450,0.02278485])
         _ => error("shame for not knowing your canadian provinces and territories")
     end       
@@ -1328,8 +1265,8 @@ function time_update()
         x.daysinf += 1
         x.days_recovered += 1 # We don't care about this up to the recovery
         x.days_after_detection += 1 #we don't care about this untill the individual is detected
-
-        if x.iso && x.daysisolation >= x.isolation_days && !(x.health_status in (HOS,ICU,DED))
+        x.daysisolation += 1
+        if x.iso && x.daysisolation >= p.isolation_days && !(x.health_status in (HOS,ICU,DED))
             _set_isolation(x,false,:null)
             x.positive = false
         end
@@ -2293,4 +2230,4 @@ end
 #const vac_rate_2 = vaccination_rate_2()
 ## references: 
 # critical care capacity in Canada https://www.ncbi.nlm.nih.gov/pubmed/25888116
-end # module end
+#end # module end
