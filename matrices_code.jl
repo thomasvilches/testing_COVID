@@ -2328,7 +2328,7 @@ function distribute_vaccine(M1,M2,B)
     ### now I want to distribute booster
     Baux = reverse(B)
     for i = 1:length(Baux)
-        pos = findall(y-> y.vac_status == 2 && y.boosted == 0 && y.days_vac >= p.booster_after[y.vaccine_n]+(i-1) && y.age >= p.min_age_booster,humans)
+        pos = findall(y-> y.vac_status == 2 && y.n_boosted == 0 && y.days_vac >= p.booster_after[y.vaccine_n]+(i-1) && y.age >= p.min_age_booster,humans)
 
         n1 = min(Baux[i],length(pos))
         pos_vac = sample(pos,n1,replace = false)
@@ -2337,10 +2337,15 @@ function distribute_vaccine(M1,M2,B)
             x.days_vac = (i-1) ##rand the day
             x.protected = length(p.days_to_protection[x.vaccine_n][x.vac_status])
             x.index_day = min(length(p.days_to_protection[x.vaccine_n][x.vac_status]),x.protected+1)
-            x.boosted += 1
-            x.vac_eff_inf = deepcopy(p.vac_efficacy_inf[x.vaccine_n])
-            x.vac_eff_symp = deepcopy(p.vac_efficacy_symp[x.vaccine_n])
-            x.vac_eff_sev = deepcopy(p.vac_efficacy_sev[x.vaccine_n])
+            x.n_boosted += 1
+            x.boosted = true
+            #### ADD here the new vaccine efficacy against Omicron for booster
+                
+            x.vac_eff_inf[6][2][end] = [0.76;0.677][x.vaccine_n]
+            x.vac_eff_symp[6][2][end] = 0.82
+            x.vac_eff_sev[6][2][end] = 0.90
+            #moderna has a different value against Delta for booster
+            x.vac_eff_inf[4][2][end] = [x.vac_eff_inf[4][2][end]; 0.94][x.vaccine_n]
 
             if x.recovered
                 index = Int(floor(x.days_recovered/7))
@@ -2368,7 +2373,7 @@ function distribute_vaccine(M1,M2,B)
     ## Let's boost a XX% of the population on day 0, following the order of the
     # earlier vaccinated to the later
 
-    pos = findall(y-> y.vac_status == 2 && y.boosted == 0 && y.age >= p.min_age_booster,humans)
+    pos = findall(y-> y.vac_status == 2 && y.n_boosted == 0 && y.age >= p.min_age_booster,humans)
 
     days = [x.days_vac for x in humans[pos]]
     pos_days = sortperm(days,rev=true)
@@ -2380,13 +2385,18 @@ function distribute_vaccine(M1,M2,B)
 
         for i in ranpos[1:Int(round(p.extra_booster/100*p.popsize))]
             x = humans[i]
-            x.days_vac = (i-1) ##rand the day
+            x.days_vac = 0 ##rand the day
             x.protected = length(p.days_to_protection[x.vaccine_n][x.vac_status])
             x.index_day = min(length(p.days_to_protection[x.vaccine_n][x.vac_status]),x.protected+1)
-            x.boosted += 1
-            x.vac_eff_inf = deepcopy(p.vac_efficacy_inf[x.vaccine_n])
-            x.vac_eff_symp = deepcopy(p.vac_efficacy_symp[x.vaccine_n])
-            x.vac_eff_sev = deepcopy(p.vac_efficacy_sev[x.vaccine_n])
+            x.n_boosted += 1
+            x.boosted = true
+            #### ADD here the new vaccine efficacy against Omicron for booster
+                
+            x.vac_eff_inf[6][2][end] = [0.76;0.677][x.vaccine_n]
+            x.vac_eff_symp[6][2][end] = 0.82
+            x.vac_eff_sev[6][2][end] = 0.90
+            #moderna has a different value against Delta for booster
+            x.vac_eff_inf[4][2][end] = [x.vac_eff_inf[4][2][end]; 0.94][x.vaccine_n]
 
             if x.recovered
                 index = Int(floor(x.days_recovered/7))

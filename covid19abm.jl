@@ -163,6 +163,13 @@ end
     [[[0.66;0.7],[0.7,0.97]],[[0.8;0.82],[0.82,0.95]],[[0.88;0.95],[0.95;0.95]],[[0.9;0.91],[0.91,0.98]],[[0.66;0.7],[0.7,0.97]],[[0.744;0.744],[0.744,0.81]]],#### 50:5:80
     [[[0.921]],[[0.816]],[[0.34]],[[0.781]],[[0.921]],[[0.34]]]]#### 50:5:80
 
+    # ----- Recovery efficacy ----- #
+    #https://www.nejm.org/doi/full/10.1056/NEJMc2200133
+    # using infection the same as symptoms
+    rec_eff_inf::Vector{Float64} = [1.0;0.902;0.857;0.92;1.0;0.56]
+    rec_eff_symp::Vector{Float64} = [1.0;0.902;0.857;0.92;1.0;0.56]
+    rec_eff_sev::Vector{Float64} = [1.0;0.694;0.88;1.0;1.0;0.878]
+    
     time_change_contact::Array{Int64,1} = [1;map(y-> 95+y,0:3);map(y->134+y,0:9);map(y->166+y,0:13);map(y->199+y,0:35)]
     change_rate_values::Array{Float64,1} = [1.0;map(y-> 1.0-0.01*y,1:4);map(y-> 0.96-(0.055/10)*y,1:10);map(y-> 0.90+(0.1/14)*y,1:14);map(y-> 1.0-(0.34/36)*y,1:36)]
     contact_change_rate::Float64 = 1.0 #the rate that receives the value of change_rate_values
@@ -247,7 +254,7 @@ function runsim(simnum, ip::ModelParameters)
     spl = _splitstate(hmatrix, ags)
     work = _collectdf(spl[1])
     
-    age_groups = [0:4, 5:11, 12:17, 18:49, 50:64, 65:79, 80:999]
+    age_groups = [0:4, 5:17, 18:29, 30:39, 40:49, 50:64, 65:74, 75:84, 85:999]
     ags = map(x->findfirst(y-> x.age in y, age_groups),humans) # store a vector of the age group distribution 
     spl = _splitstate(hmatrix, ags)
     ag1 = _collectdf(spl[1])
@@ -257,9 +264,12 @@ function runsim(simnum, ip::ModelParameters)
     ag5 = _collectdf(spl[5])
     ag6 = _collectdf(spl[6])
     ag7 = _collectdf(spl[7])
+    ag8 = _collectdf(spl[8])
+    ag9 = _collectdf(spl[9])
     insertcols!(all, 1, :sim => simnum); insertcols!(ag1, 1, :sim => simnum); insertcols!(ag2, 1, :sim => simnum); 
     insertcols!(ag3, 1, :sim => simnum); insertcols!(ag4, 1, :sim => simnum); insertcols!(ag5, 1, :sim => simnum);
-    insertcols!(ag6, 1, :sim => simnum); insertcols!(ag7, 1, :sim => simnum); insertcols!(work, 1, :sim => simnum);
+    insertcols!(ag6, 1, :sim => simnum); insertcols!(ag7, 1, :sim => simnum); insertcols!(ag8, 1, :sim => simnum); 
+    insertcols!(ag9, 1, :sim => simnum); insertcols!(work, 1, :sim => simnum);
     
 
     coverage1 = length(findall(x-> x.age >= 18 && x.vac_status >= 1,humans))/length(findall(x-> x.age >= 18,humans))
@@ -620,15 +630,19 @@ end
 
 function waning_immunity(x::Human)
     index = Int(floor(x.days_vac/7))
-    if index > 0 && index <= size(waning_factors,1)
-        j = x.protected
-        for i in 1:length(x.vac_eff_inf)
-            x.vac_eff_inf[i][x.vac_status][j] = p.vac_efficacy_inf[x.vaccine_n][i][x.vac_status][j]*(waning_factors[index,x.vaccine_n])^p.waning
-            x.vac_eff_symp[i][x.vac_status][j] = p.vac_efficacy_symp[x.vaccine_n][i][x.vac_status][j]*(waning_factors[index,x.vaccine_n+2])^p.waning
-            x.vac_eff_sev[i][x.vac_status][j] = p.vac_efficacy_sev[x.vaccine_n][i][x.vac_status][j]*(waning_factors[index,x.vaccine_n+2])^p.waning
+    if index > 0
+        if index <= size(waning_factors,1)
+            waning = [waning_factors[index,x.vaccine_n]^p.waning; waning_factors[index,x.vaccine_n+2]^p.waning]
+        else
+            waning = [waning_factors[end,x.vaccine_n]^p.waning; waning_factors[end,x.vaccine_n+2]^p.waning]
         end
+    else
+        waning = [1.0;1.0]
     end
+
+    return waning
 end
+
 
 
 
@@ -935,6 +949,7 @@ function vac_update(x::Human)
         if !x.relaxed
             x.relaxed = p.relaxed &&  x.vac_status >= p.status_relax && x.days_vac >= p.relax_after ? true : false
         end
+        x.waning = waning_immunity(x)
         x.days_vac += 1
 
     elseif x.vac_status == 2
@@ -949,7 +964,7 @@ function vac_update(x::Human)
         if !x.relaxed
             x.relaxed = p.relaxed &&  x.vac_status >= p.status_relax && x.days_vac >= p.relax_after ? true : false
         end
-        waning_immunity(x)
+        x.waning = waning_immunity(x)
         x.days_vac += 1
     end
    
@@ -1404,12 +1419,12 @@ function move_to_latent(x::Human)
             else
                 aux = 1.0#*(1-aux_red)
             end
-
+            aux = p.rec_eff_symp[x.strain]*aux
         elseif x.recvac == 2
 
             if x.vac_status*x.protected > 0
 
-                aux = x.vac_eff_symp[x.strain][end][end]
+                aux = x.vac_eff_symp[x.strain][end][end]*x.waning[2]
                 
             else
                 if index > 0
@@ -1421,12 +1436,13 @@ function move_to_latent(x::Human)
                 else
                     aux = 1.0
                 end
+                aux = p.rec_eff_symp[x.strain]*aux
             end
         else
             error("move to latent recvac")
         end
     else
-        aux = x.vac_status*x.protected > 0 ? x.vac_eff_symp[x.strain][x.vac_status][x.protected] : 0.0
+        aux = x.vac_status*x.protected > 0 ? x.vac_eff_symp[x.strain][x.vac_status][x.protected]*x.waning[2] : 0.0
     end
     auxiliar = (1-aux)
  
@@ -1484,10 +1500,10 @@ function move_to_pre(x::Human)
     x.exp = x.dur[3] # get the presymptomatic period
     ##########
 
-    
+    aux_red = 0.0
     if x.recovered
         index = Int(floor(x.days_recovered/7))
-        aux_red = x.strain == 6 ? p.reduction_sev_omicron : 0.0
+        aux_red = 0.0#x.strain == 6 ? p.reduction_sev_omicron : 0.0
 
         if x.recvac == 1
 
@@ -1500,11 +1516,11 @@ function move_to_pre(x::Human)
             else
                 aux = 1.0#*(1-aux_red)
             end
-
+            aux = p.rec_eff_sev[x.strain]*aux
         elseif x.recvac == 2
 
             if x.vac_status*x.protected > 0
-                aux = x.vac_eff_sev[x.strain][end][end]
+                aux = x.vac_eff_sev[x.strain][end][end]*x.waning[2]
             else
                 if index > 0
                     if index <= size(waning_factors_rec,1)
@@ -1515,13 +1531,14 @@ function move_to_pre(x::Human)
                 else
                     aux = 1.0
                 end
+                aux = p.rec_eff_sev[x.strain]*aux
             end
         end
     else
         if x.vac_status*x.protected > 0
             
-            aux_red = x.strain == 6 ? p.reduction_sev_omicron : 0.0
-            aux = x.vac_eff_sev[x.strain][x.vac_status][x.protected]
+            aux_red = 0.0#x.strain == 6 ? p.reduction_sev_omicron : 0.0
+            aux = x.vac_eff_sev[x.strain][x.vac_status][x.protected]*x.waning[2]
         else
             aux = 0.0
             aux_red = 0.0
@@ -2048,18 +2065,8 @@ function dyntrans(sys_time, grps,workplaces,schools,initial_dw,sim)
                     adj_beta = 0 # adjusted beta value by strain and vaccine efficacy
                     if y.health == SUS && y.swap == UNDEF
                         if y.vac_status*y.protected > 0
-
-                            if x.strain == 6
-                                if y.boosted
-                                    aux_r = (y.days_vac > 90) ? (1-p.reduction_omicron*(1-p.reduction_reduction)) : 1.0
-                                else
-                                    aux_r = (y.days_vac > 90 && y.vac_status == 2) ? (1-p.reduction_omicron) : 1.0
-                                end
-                            else
-                                aux_r = 1.0
-                            end
-
-                            aux = aux_r*y.vac_eff_inf[x.strain][y.vac_status][y.protected]
+                            aux = y.vac_eff_inf[x.strain][y.vac_status][y.protected]*y.waning[1]
+                            
                         else
                             aux = 0.0
                         end
@@ -2068,12 +2075,12 @@ function dyntrans(sys_time, grps,workplaces,schools,initial_dw,sim)
 
                     elseif y.health_status == REC && y.swap == UNDEF
                         index = Int(floor(y.days_recovered/7))
-
-                        if y.vac_status > 0
-                            aux_red = (x.strain == 6 && y.days_recovered > 90 && y.days_vac > 90) ? p.reduction_omicron : 0.0
+                        aux_red = 0.0
+                        #= if y.vac_status > 0
+                            aux_red = 0.0
                         else
-                            aux_red = (x.strain == 6 && y.days_recovered > 90) ? p.reduction_omicron : 0.0
-                        end
+                            aux_red = (x.strain == 6 && y.days_recovered > 70) ? p.reduction_omicron : 0.0
+                        end =#
 
                         if y.recvac == 1
 
@@ -2086,27 +2093,26 @@ function dyntrans(sys_time, grps,workplaces,schools,initial_dw,sim)
                             else
                                 aux = 1.0
                             end
-                            aux_vac = y.vac_status*y.protected > 0 ? (1-p.reduction_reduction) : 1.0
-                            aux = aux*(1-aux_red*aux_vac)
-
+                            #aux = aux*(1-aux_red)
+                            aux = p.rec_eff_inf[x.strain]*aux
                         elseif y.recvac == 2
 
                             if y.vac_status*y.protected > 0
-
-                                aux_vac = y.vac_eff_inf[x.strain][end][end]
-                                aux = aux_vac*(1-aux_red*(1-p.reduction_reduction))
+                                aux_vac = y.vac_eff_inf[x.strain][end][end]*y.waning[1]
+                                aux = aux_vac*(1-aux_red)
                             else
                                 
                                 if index > 0
                                     if index <= size(waning_factors_rec,1)
-                                        aux = waning_factors_rec[index,1]*(1-aux_red)
+                                        aux = waning_factors_rec[index,1]
                                     else
-                                        aux = waning_factors_rec[end,1]*(1-aux_red)
+                                        aux = waning_factors_rec[end,1]
                                     end
                                 else
-                                    aux = 1.0*(1-aux_red)
+                                    aux = 1.0
                                 end
-    
+                                
+                                aux = p.rec_eff_inf[x.strain]*aux
                             end
                         end
 
