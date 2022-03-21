@@ -205,6 +205,7 @@ end
     scenariotest::Int64 = 0
     prop_risk::Float64 = 0.3 ##proportion of workplaces at risk
     size_threshold::Int64 = 100
+    extra_booster::Int64 = 0
 end
 
 Base.@kwdef mutable struct ct_data_collect
@@ -368,13 +369,6 @@ function main(ip::ModelParameters,sim::Int64)
 
     testing_group::Vector{Int64} = select_testing_group(workplaces)
   
-
-    ##fix it here
-    if p.vaccinating
-        vac_ind::Vector{Vector{Int64}} = vac_selection(sim,5,agebraks_vac)
-    else
-        time_vac = 9999 #this guarantees that no one will be vaccinated
-    end
 
     
     # start the time loop

@@ -2287,12 +2287,12 @@ function distribute_vaccine(M1,M2,B)
         for j in pos_vac
             #println(j)
             x = humans[j]
-            x.vac_status = 1
+            x.vac_status = 2 #let's set everybody to second dose
             
             x.vaccine_n = x.age >= 18 ? rand(p1) : 1#rand the vaccine
                 
             x.vaccine = [:pfizer,:moderna,:jensen][x.vaccine_n]
-            x.days_vac = rand(p_day) ##rand the day
+            x.days_vac = 0#rand(p_day) ##rand the day
             x.protected = x.days_vac > p.days_to_protection[x.vaccine_n][x.vac_status][1] ? findfirst(y-> y < x.days_vac,p.days_to_protection[x.vaccine_n][x.vac_status]) : 0
             x.index_day = min(length(p.days_to_protection[x.vaccine_n][x.vac_status]),x.protected+1)
 
@@ -2337,7 +2337,7 @@ function distribute_vaccine(M1,M2,B)
             x.days_vac = (i-1) ##rand the day
             x.protected = length(p.days_to_protection[x.vaccine_n][x.vac_status])
             x.index_day = min(length(p.days_to_protection[x.vaccine_n][x.vac_status]),x.protected+1)
-
+            x.boosted += 1
             x.vac_eff_inf = deepcopy(p.vac_efficacy_inf[x.vaccine_n])
             x.vac_eff_symp = deepcopy(p.vac_efficacy_symp[x.vaccine_n])
             x.vac_eff_sev = deepcopy(p.vac_efficacy_sev[x.vaccine_n])
@@ -2363,6 +2363,51 @@ function distribute_vaccine(M1,M2,B)
             end
         end
 
+    end
+
+    ## Let's boost a XX% of the population on day 0, following the order of the
+    # earlier vaccinated to the later
+
+    pos = findall(y-> y.vac_status == 2 && y.boosted == 0 && y.age >= p.min_age_booster,humans)
+
+    days = [x.days_vac for x in humans[pos]]
+    pos_days = sortperm(days,rev=true)
+    ranpos = pos[pos_days]
+
+    if Int(round(p.extra_booster/100*p.popsize)) > length(ranpos)
+        error("not enough fully vaccinated")
+    else
+
+        for i in ranpos[1:Int(round(p.extra_booster/100*p.popsize))]
+            x = humans[i]
+            x.days_vac = (i-1) ##rand the day
+            x.protected = length(p.days_to_protection[x.vaccine_n][x.vac_status])
+            x.index_day = min(length(p.days_to_protection[x.vaccine_n][x.vac_status]),x.protected+1)
+            x.boosted += 1
+            x.vac_eff_inf = deepcopy(p.vac_efficacy_inf[x.vaccine_n])
+            x.vac_eff_symp = deepcopy(p.vac_efficacy_symp[x.vaccine_n])
+            x.vac_eff_sev = deepcopy(p.vac_efficacy_sev[x.vaccine_n])
+
+            if x.recovered
+                index = Int(floor(x.days_recovered/7))
+
+                if index > 0
+                    if index <= size(waning_factors_rec,1)
+                        aux = waning_factors_rec[index,1]
+                    else
+                        aux = waning_factors_rec[end,1]
+                    end
+                else
+                    aux = 1.0
+                end
+
+                if aux > x.vac_eff_inf[1][x.vac_status][end]
+                    x.recvac = 1
+                else
+                    x.recvac = 2
+                end
+            end
+        end
     end
 
 
