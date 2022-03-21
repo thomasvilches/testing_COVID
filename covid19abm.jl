@@ -74,13 +74,10 @@ end
     start_several_inf::Bool = true
     modeltime::Int64 = 435
     initialinf::Int64 = 20
-    initialhi::Int64 = 20 ## initial herd immunity, inserts number of REC individuals
     τmild::Int64 = 0 ## days before they self-isolate for mild cases
     fmild::Float64 = 1.0  ## percent of people practice self-isolation
     τinf::Int64 = 0
     fsevere::Float64 = 1.0 #
-    eldq::Float64 = 0.0 ## complete isolation of elderly
-    eldqag::Int8 = 5 ## default age group, if quarantined(isolated) is ag 5.  
     frelasymp::Float64 = 0.26 ## relative transmission of asymptomatic
     fctcapture::Float16 = 0.0 ## how many symptomatic people identified
     #vaccine_ef::Float16 = 0.0   ## change this to Float32 typemax(Float32) typemax(Float64)
@@ -97,39 +94,21 @@ end
 
     
     vaccinating::Bool = true #vaccinating?
-   
-    red_risk_perc::Float64 = 1.0 #relative isolation in vaccinated individuals
-    days_Rt::Array{Int64,1} = [100;200;300] #days to get Rt
-
+    
     ##Alpha - B.1.1.7
     sec_strain_trans::Float64 = 1.5#1.5 #transmissibility of second strain
-    ins_sec_strain::Bool = true #insert second strain?
-    initialinf2::Int64 = 1 #number of initial infected of second strain
-    time_sec_strain::Int64 = 125 #when will the second strain introduced -- Jan 3
-
+    
     ## Gamma - P.1
-    ins_third_strain::Bool = true #insert third strain?
-    initialinf3::Int64 = 5 #number of initial infected of third strain
-    time_third_strain::Int64 = 999 #when will the third strain introduced - P1 March 20
     third_strain_trans::Float64 = 1.6 #transmissibility of third strain
     
     ## Delta - B.1.617.2
-    ins_fourth_strain::Bool = true #insert fourth strain?
-    initialinf4::Int64 = 1 #number of initial infected of fourth strain
-    time_fourth_strain::Int64 = 173 #when will the fourth strain introduced
     fourth_strain_trans::Float64 = 1.3 #transmissibility compared to second strain strain
 
     ## Iota - B.1.526
-    ins_fifth_strain::Bool = true #insert fifth strain?
-    initialinf5::Int64 = 1 #number of initial infected of fifth strain
-    time_fifth_strain::Int64 = 7 #when will the fifth strain introduced
     fifth_strain_trans::Float64 = 1.35 #transmissibility of fifth strain
 
     ##OMICRON
-    ins_sixth_strain::Bool = true #insert third strain?
-    initialinf6::Int64 = 1 #number of initial infected of sixth strain
-    time_sixth_strain::Int64 = 999 #when will the sixth strain introduced
-    rel_trans_sixth::Float64 = 1.0
+    rel_trans_sixth::Float64 = 1.35
     sixth_strain_trans::Float64 = rel_trans_sixth*sec_strain_trans*fourth_strain_trans #transmissibility of sixth strain
     reduction_sev_omicron::Float64 = 0.752 ##reduction of severity compared to Delta
 
@@ -139,16 +118,10 @@ end
     vaccine_proportion_2::Vector{Float64} = [0.78; 0.22; 0.0]
     vac_period::Array{Int64,1} = [21;28;999]
     
-    
     #=------------ Vaccine Efficacy ----------------------------=#
     booster_after::Array{Int64,1} = [180;180;999]
-    booster_after_bkup::Array{Int64,1} = [150;150;999]
-    change_booster_eligibility::Int64 = 999
     n_boosts::Int64 = 1
-    time_first_to_booster::Int64 = 9999
     min_age_booster::Int64 = 16
-    reduction_omicron::Float64 = 0.0
-    reduction_reduction::Float64 = 0.0
     #=------------ Vaccine Efficacy ----------------------------=#
     days_to_protection::Array{Array{Array{Int64,1},1},1} = [[[14;21],[0;7]],[[14;21],[0;7]],[[14]]]
     vac_efficacy_inf::Array{Array{Array{Array{Float64,1},1},1},1} = [[[[0.46;0.46],[0.46;0.861]],[[0.295;0.295],[0.295;0.895]],[[0.368;0.368],[0.368;0.75]],[[0.416;0.416],[0.416;0.85]],[[0.46;0.46],[0.46;0.861]],[[0.16;0.16],[0.16;0.33]]],#booster efficacy  for omicron changed in vac_time function
@@ -173,27 +146,19 @@ end
     time_change_contact::Array{Int64,1} = [1;map(y-> 95+y,0:3);map(y->134+y,0:9);map(y->166+y,0:13);map(y->199+y,0:35)]
     change_rate_values::Array{Float64,1} = [1.0;map(y-> 1.0-0.01*y,1:4);map(y-> 0.96-(0.055/10)*y,1:10);map(y-> 0.90+(0.1/14)*y,1:14);map(y-> 1.0-(0.34/36)*y,1:36)]
     contact_change_rate::Float64 = 1.0 #the rate that receives the value of change_rate_values
-    contact_change_2::Float64 = 0.5 ##baseline number that multiplies the contact rate
+    contact_change_2::Float64 = 1.0 ##baseline number that multiplies the contact rate
 
     relaxed::Bool = false
     relaxing_time::Int64 = 215 ### relax measures for vaccinated
     status_relax::Int16 = 2
     relax_after::Int64 = 1
 
-    relax_over::Int64 = 92
-    relax_rate::Float64 = (1-contact_change_2)/relax_over
     turnon::Int64 = 0
-    time_back_to_normal::Int64 = 999
 
     day_inital_vac::Int64 = 104 ###this must match to the matrices in matrice code
     time_vac_kids::Int64 = 253
     time_vac_kids2::Int64 = 428
     using_jj::Bool = false
-
-    daysofvac::Int64 = 365### check it
-    
-
-    scenario::Symbol = :statuscuo
 
     #one waning rate for each efficacy? For each strain? I can change this structure based on that
     reduce_days::Int64 = 0
@@ -201,8 +166,7 @@ end
     ### after calibration, how much do we want to increase the contact rate... in this case, to reach 70%
     ### 0.5*0.95 = 0.475, so we want to multiply this by 1.473684211
     proportion_contacts_workplace::Float64 = 0.0
-    proportion_contacts_school::Float64 = 0.0
-
+    
     ##for testing
     initial_day_week::Int64 = 1 # 1- Monday ... 7- Sunday
     testing_days::Vector{Int64} = [2;4;6]
@@ -210,7 +174,6 @@ end
     isolation_days::Int64 = 5 #how many days of isolation after testing
     test_ra::Int64 = 0 #1 - PCR, 2 - Abbott_PanBio 3 - 	BTNX_Rapid_Response	4 - Artron
     scenariotest::Int64 = 0
-    prop_risk::Float64 = 0.3 ##proportion of workplaces at risk
     size_threshold::Int64 = 100
     extra_booster::Int64 = 0
 end
@@ -343,11 +306,7 @@ function main(ip::ModelParameters,sim::Int64)
     vac_rate_1::Matrix{Int64} = vaccination_rate_1(sim)
     vac_rate_2::Matrix{Int64} = vaccination_rate_2(sim)
     vac_rate_booster::Vector{Int64} = booster_doses()
-    vaccination_days::Vector{Int64} = days_vac_f(size(vac_rate_1,1))
-
-    agebraks_vac::SVector{8, UnitRange{Int64}} = get_breaks_vac()#@SVector [0:0,1:4,5:14,15:24,25:44,45:64,65:74,75:100]
-
-    v_prop,fd_prop,sd_prop = temporal_proportion()
+    
     #h_init::Int64 = 0
     # insert initial infected agents into the model
     # and setup the right swap function. 
@@ -364,10 +323,6 @@ function main(ip::ModelParameters,sim::Int64)
     grps = get_ag_dist()
     workplaces = create_workplace()
     #schools = create_schools()
-    
-    time_vac::Int64 = 1
-    remaining_doses::Int64 = 0
-    total_given::Int64 = 0
     
     initial_dw::Int64 = p.initial_day_week
 
@@ -409,7 +364,7 @@ function main(ip::ModelParameters,sim::Int64)
     end
     
     
-    return hmatrix, remaining_doses, total_given, unvac_rec,unvac_unrec,vac_1,vac_2,vac_3 ## return the model state as well as the age groups. 
+    return hmatrix, unvac_rec,unvac_unrec,vac_1,vac_2,vac_3 ## return the model state as well as the age groups. 
 end
 export main
 
@@ -590,43 +545,6 @@ function testing(grp,dayweek)
 end
 
 
-##### creating schools
-function schools_size()
-    size = 100
-    return size
-end
-
-### I can change it to split basic, mid, and high
-function create_schools()
-    pos = findall(x-> x.age in 5:18,humans)
-    N = length(pos)
-    
-    vaux = map(y-> schools_size(),1:Int(round(p.popsize/10.0)))
-    vvaux = cumsum(vaux)
-    aux = findfirst(y-> y > N, vvaux)
-    aux == nothing && error("increase the number of schools")
-
-    vaux = vaux[1:aux]
-    vvaux = vvaux[1:aux]
-
-    vaux[end] = N-vvaux[end-1]
-    
-
-    samples::Vector{Vector{Int64}} = map(y-> [y],1:length(vaux))
-
-    for i = 1:length(samples)
-        xx = sample(pos,vaux[i],replace=false)
-        pos = setdiff(pos,xx)
-    
-        for j in xx
-            humans[j].school_idx = i
-        end
-        samples[i] = deepcopy(xx)
-    end
-
-
-    return samples
-end 
 
 function waning_immunity(x::Human)
     index = Int(floor(x.days_vac/7))
@@ -641,298 +559,6 @@ function waning_immunity(x::Human)
     end
 
     return waning
-end
-
-
-
-
-function vac_selection(sim::Int64,age::Int64,agebraks_vac)
-    
-    
-
-   
-    aux_1 = map(k-> findall(y-> y.age in k && y.age >= age && y.comorbidity == 1,humans),agebraks_vac)
-    aux_2 = map(k-> findall(y-> y.age in k && y.age >= age && y.comorbidity == 0,humans),agebraks_vac)
-
-    v = map(x-> [aux_1[x];aux_2[x]],1:length(aux_1))
-    
-    return v
-end
-
-
-function vac_time!(sim::Int64,vac_ind::Vector{Vector{Int64}},time_pos::Int64,vac_rate_1::Matrix{Int64},vac_rate_2::Matrix{Int64},vac_rate_booster::Vector{Int64})
-    aux_states = (MILD, MISO, INF, IISO, HOS, ICU, DED)
-    ##first dose
-   # rng = MersenneTwister(123*sim)
-    ### lets create distribute the number of doses per age group
-    
-    remaining_doses::Int64 = 0
-    total_given::Int64 = 0
-
-    ### Let's calculate the number of available doses per vaccine type
-    doses_first::Vector{Int64} = Int.(round.(sum(vac_rate_1[time_pos,:])*(p.vaccine_proportion/sum(p.vaccine_proportion))))
-    doses_second::Vector{Int64} = Int.(round.(sum(vac_rate_2[time_pos,:])*(p.vaccine_proportion_2/sum(p.vaccine_proportion_2))))
-
-    if sum(doses_first) < sum(vac_rate_1[time_pos,:])
-        r = rand(1:3)
-        doses_first[r] += 1
-    elseif sum(doses_first) > sum(vac_rate_1[time_pos,:])
-        rr=findall(y-> y>0,doses_first)
-        r = rand(rr)
-        doses_first[r] -= 1
-    end
-
-    if sum(doses_second) < sum(vac_rate_2[time_pos,:])
-        r = rand(1:2)
-        doses_second[r] += 1
-    elseif sum(doses_second) > sum(vac_rate_2[time_pos,:])
-        rr=findall(y-> y>0,doses_second)
-        r = rand(rr)
-        doses_first[r] -= 1
-    end
-
-
-    for i in 1:length(vac_ind)
-        pos = findall(y-> humans[y].vac_status == 1 && humans[y].days_vac >= p.vac_period[humans[y].vaccine_n] && !(humans[y].health_status in aux_states),vac_ind[i])
-        
-        l1 = min(vac_rate_2[time_pos,i],length(pos))
-        remaining_doses += (vac_rate_2[time_pos,i])
-
-        for j = 1:l1
-            if doses_second[1] > 0 && doses_second[2] > 0 
-                pos2 = filter(x-> humans[vac_ind[i][x]].vac_status == 1,pos)
-            elseif doses_second[1] > 0 
-                pos2 = filter(x-> humans[vac_ind[i][x]].vaccine_n == 1 && humans[vac_ind[i][x]].vac_status == 1,pos)
-            elseif doses_second[2] > 0 
-                pos2 = filter(x-> humans[vac_ind[i][x]].vaccine_n == 2  && humans[vac_ind[i][x]].vac_status == 1,pos)
-            else
-                error("missing doses")
-            end
-
-            if length(pos2) > 0 
-                r = rand(pos2)
-                x = humans[vac_ind[i][r]]
-                x.days_vac = 0
-                x.vac_status = 2
-                x.index_day = 1
-                total_given += 1
-                doses_second[x.vaccine_n] -= 1
-                remaining_doses -= 1
-
-                if x.recovered
-                    index = Int(floor(x.days_recovered/7))
-
-                    if index > 0
-                        if index <= size(waning_factors_rec,1)
-                            aux = waning_factors_rec[index,1]
-                        else
-                            aux = waning_factors_rec[end,1]
-                        end
-                    else
-                        aux = 1.0
-                    end
-
-                    if aux > p.vac_efficacy_inf[x.vaccine_n][1][x.vac_status][end]
-                        x.recvac = 1
-                    else
-                        x.recvac = 2
-                    end
-                end
-
-
-            else
-                break
-            end
-            
-        end
-
-        pos = findall(y-> humans[y].vac_status == 0 && !(humans[y].health_status in aux_states),vac_ind[i])
-        
-        l2 = min(vac_rate_1[time_pos,i],length(pos))
-        remaining_doses += (vac_rate_1[time_pos,i])
-        for j = 1:l2
-            if doses_first[1] > 0
-                pos2 = filter(x-> humans[vac_ind[i][x]].vac_status == 0,pos)
-            else
-                pos2 = filter(x-> humans[vac_ind[i][x]].age >= 18 && humans[vac_ind[i][x]].vac_status == 0,pos)
-            end
-
-            if length(pos2) > 0 
-                r = rand(pos2)
-                x = humans[vac_ind[i][r]]
-                x.days_vac = 0
-                x.vac_status = 1
-                x.index_day = 1
-                x.vaccine_n = x.age < 18 ? 1 : sample([1,2,3], Weights(doses_first/sum(doses_first)))
-                x.vaccine = [:pfizer;:moderna;:jensen][x.vaccine_n]
-                doses_first[x.vaccine_n] -= 1
-                remaining_doses -= 1
-                total_given += 1
-
-                x.vac_eff_inf = deepcopy(p.vac_efficacy_inf[x.vaccine_n])
-                x.vac_eff_symp = deepcopy(p.vac_efficacy_symp[x.vaccine_n])
-                x.vac_eff_sev = deepcopy(p.vac_efficacy_sev[x.vaccine_n])
-
-
-                if x.recovered
-                    index = Int(floor(x.days_recovered/7))
-
-                    if index > 0
-                        if index <= size(waning_factors_rec,1)
-                            aux = waning_factors_rec[index,1]
-                        else
-                            aux = waning_factors_rec[end,1]
-                        end
-                    else
-                        aux = 1.0
-                    end
-
-                    if aux > p.vac_efficacy_inf[x.vaccine_n][1][x.vac_status][end]
-                        x.recvac = 1
-                    else
-                        x.recvac = 2
-                    end
-                end
-            else
-                break
-            end
-            
-        end
-    end
-    ###remaining_doses are given to any individual within the groups that are vaccinated on that day
-    v1 = ones(Int64,doses_second[1]+doses_first[1])
-    v2 = 2*ones(Int64,doses_second[2]+doses_first[2])
-    v3 = 3*ones(Int64,doses_second[3]+doses_first[3])
-
-    v = shuffle([v1;v2;v3])
-
-    for vac in v
-        if vac == 1
-            pos = map(k->findall(y-> humans[y].vac_status == 1 && humans[y].vaccine_n == vac && humans[y].days_vac >= p.vac_period[humans[y].vaccine_n] && !(humans[y].health_status in aux_states),vac_ind[k]),1:length(vac_ind))
-            pos2 = map(k->findall(y-> humans[y].vac_status == 0 && !(humans[y].health_status in aux_states),vac_ind[k]),1:length(vac_ind))
-        
-        elseif vac == 2
-            pos = map(k->findall(y-> humans[y].vac_status == 1 && humans[y].vaccine_n == vac && humans[y].days_vac >= p.vac_period[humans[y].vaccine_n] && !(humans[y].health_status in aux_states),vac_ind[k]),1:length(vac_ind))
-            pos2 = map(k->findall(y-> humans[y].vac_status == 0 && humans[y].age >= 18 && !(humans[y].health_status in aux_states),vac_ind[k]),1:length(vac_ind))
-        
-        else
-            pos = map(k->findall(y-> humans[y].vac_status == 1 && humans[y].vaccine_n == vac && humans[y].days_vac >= p.vac_period[humans[y].vaccine_n] && !(humans[y].health_status in aux_states),vac_ind[k]),1:length(vac_ind))
-            pos2 = map(k->findall(y-> humans[y].vac_status == 0 && humans[y].age >= 18 && !(humans[y].health_status in aux_states),vac_ind[k]),1:length(vac_ind))
-        end
-
-        aux = findall(x-> vac_rate_1[time_pos,x] > 0 || vac_rate_2[time_pos,x] > 0, 1:length(vac_ind))
-        position = map(k-> vac_ind[k][pos[k]],aux)
-        position2 = map(k-> vac_ind[k][pos2[k]],aux)
-        r = vcat(position...,position2...)
-        
-        length(r) == 0 && continue
-            
-        rr = sample(r)
-        x = humans[rr]
-        if x.vac_status == 0
-            x.days_vac = 0
-            x.vac_status = 1
-            x.index_day = 1
-            x.vaccine_n = vac
-            x.vaccine = [:pfizer;:moderna;:jensen][x.vaccine_n]
-            remaining_doses -= 1
-            total_given += 1
-            x.vac_eff_inf = deepcopy(p.vac_efficacy_inf[x.vaccine_n])
-            x.vac_eff_symp = deepcopy(p.vac_efficacy_symp[x.vaccine_n])
-            x.vac_eff_sev = deepcopy(p.vac_efficacy_sev[x.vaccine_n])
-            if x.recovered
-                index = Int(floor(x.days_recovered/7))
-
-                if index > 0
-                    if index <= size(waning_factors_rec,1)
-                        aux = waning_factors_rec[index,1]
-                    else
-                        aux = waning_factors_rec[end,1]
-                    end
-                else
-                    aux = 1.0
-                end
-
-                if aux > p.vac_efficacy_inf[x.vaccine_n][1][x.vac_status][end]
-                    x.recvac = 1
-                else
-                    x.recvac = 2
-                end
-            end
-        elseif x.vac_status == 1
-            x.days_vac = 0
-            x.vac_status = 2
-            x.index_day = 1
-            remaining_doses -= 1
-            total_given += 1
-
-            if x.recovered
-                index = Int(floor(x.days_recovered/7))
-
-                if index > 0
-                    if index <= size(waning_factors_rec,1)
-                        aux = waning_factors_rec[index,1]
-                    else
-                        aux = waning_factors_rec[end,1]
-                    end
-                else
-                    aux = 1.0
-                end
-
-                if aux > p.vac_efficacy_inf[x.vaccine_n][1][x.vac_status][end]
-                    x.recvac = 1
-                else
-                    x.recvac = 2
-                end
-            end
-            
-        else
-            error("error in humans vac status - vac time")
-        end
-    end
-
-   
-    ### Let's add booster... those are extra doses, we don't care about missing doses
-
-    pos = findall(y-> y.vac_status == 2 && y.days_vac >= p.booster_after[y.vaccine_n] && y.age >= p.min_age_booster && y.n_boosted < p.n_boosts && !(y.health_status in aux_states),humans)
-
-    l2 = min(vac_rate_booster[time_pos]+remaining_doses,length(pos))
-    pos = sample(pos,l2,replace=false)
-
-    for i in pos
-        x = humans[i]
-        x.days_vac = 0
-        x.boosted = true
-        x.n_boosted += 1
-        x.vac_eff_inf = deepcopy(p.vac_efficacy_inf[x.vaccine_n])
-        x.vac_eff_symp = deepcopy(p.vac_efficacy_symp[x.vaccine_n])
-        x.vac_eff_sev = deepcopy(p.vac_efficacy_sev[x.vaccine_n])
-
-        if x.recovered
-            index = Int(floor(x.days_recovered/7))
-
-            if index > 0
-                if index <= size(waning_factors_rec,1)
-                    aux = waning_factors_rec[index,1]
-                else
-                    aux = waning_factors_rec[end,1]
-                end
-            else
-                aux = 1.0
-            end
-
-            if aux > p.vac_efficacy_inf[x.vaccine_n][1][x.vac_status][end]
-                x.recvac = 1
-            else
-                x.recvac = 2
-            end
-        end
-    end
-
-   
-
-    return remaining_doses,total_given
-
 end
 
 function vac_update(x::Human)
@@ -2008,41 +1634,21 @@ function dyntrans(sys_time, grps,workplaces,schools,initial_dw,sim)
             if !x.iso && initial_dw ∉ (6,7) ###if no isolated and working days
 
                 if x.workplace_idx > 0 
-                    if x.school_idx > 0
-                        ## carefull here
-                        cnts_s = Int(round(cnts*(p.proportion_contacts_school)))
-                        cnts_w = Int(round(cnts*(p.proportion_contacts_workplace)))
-                        cnts = cnts-cnts_w-cnts ##carefull here
-
-                        gpw = Int.(round.(cm[x.ag]*cnts)) # split the counts over age groups
-                        gpw = [gpw;cnts_w;cnts_s]
-            
-                        grp_sample = [grps;[workplaces[x.workplace_idx]];[schools[x.school_idx]]]
-                    else
-                        cnts_w = Int(round(cnts*(p.proportion_contacts_workplace)))
-                        cnts = cnts-cnts_w 
-
-                        gpw = Int.(round.(cm[x.ag]*cnts)) # split the counts over age groups
-                        gpw = [gpw;cnts_w]
-            
-                        grp_sample = [grps;[workplaces[x.workplace_idx]]]
-                    end
-                else
-                    if x.school_idx > 0
-                        cnts_s = Int(round(cnts*(p.proportion_contacts_school)))
-                        cnts = cnts-cnts_s
-
-                        gpw = Int.(round.(cm[x.ag]*cnts)) # split the counts over age groups
-                        gpw = [gpw;cnts_s]
-            
-                        grp_sample = [grps;[schools[x.school_idx]]]
-                    else
-                        
-                        gpw = Int.(round.(cm[x.ag]*cnts)) # split the counts over age groups
-                        
-                        grp_sample = grps
                     
-                    end
+                    cnts_w = Int(round(cnts*(p.proportion_contacts_workplace)))
+                    cnts = cnts-cnts_w 
+
+                    gpw = Int.(round.(cm[x.ag]*cnts)) # split the counts over age groups
+                    gpw = [gpw;cnts_w]
+        
+                    grp_sample = [grps;[workplaces[x.workplace_idx]]]
+                    
+                else
+                    
+                    gpw = Int.(round.(cm[x.ag]*cnts)) # split the counts over age groups
+                    
+                    grp_sample = grps
+                    
                 end
             else
                 gpw = Int.(round.(cm[x.ag]*cnts)) # split the counts over age groups
@@ -2076,11 +1682,7 @@ function dyntrans(sys_time, grps,workplaces,schools,initial_dw,sim)
                     elseif y.health_status == REC && y.swap == UNDEF
                         index = Int(floor(y.days_recovered/7))
                         aux_red = 0.0
-                        #= if y.vac_status > 0
-                            aux_red = 0.0
-                        else
-                            aux_red = (x.strain == 6 && y.days_recovered > 70) ? p.reduction_omicron : 0.0
-                        end =#
+                       
 
                         if y.recvac == 1
 
