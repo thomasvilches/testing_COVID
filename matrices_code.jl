@@ -2420,6 +2420,9 @@ function distribute_vaccine(M1,M2,B)
         end
     end
 
+    for x in humans
+        vac_update(x)
+    end
 
 end
 

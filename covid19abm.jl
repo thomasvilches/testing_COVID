@@ -47,7 +47,6 @@ Base.@kwdef mutable struct Human
     vac_eff_sev::Array{Array{Array{Float64,1},1},1} = [[[0.0]]]
 
     workplace_idx::Int64 = -1
-    school_idx::Int64 = -1
 
     #### for testing
 
@@ -60,6 +59,7 @@ Base.@kwdef mutable struct Human
     nra::Int64 = 0
     pcrprob::Float64 = 0.0
     test::Bool = false
+    waning::Vector{Float64} = [1.0;1.0]
     
 end
 
@@ -77,6 +77,7 @@ end
     τmild::Int64 = 0 ## days before they self-isolate for mild cases
     fmild::Float64 = 1.0  ## percent of people practice self-isolation
     τinf::Int64 = 0
+    τsevere::Int64 = τinf
     fsevere::Float64 = 1.0 #
     frelasymp::Float64 = 0.26 ## relative transmission of asymptomatic
     fctcapture::Float16 = 0.0 ## how many symptomatic people identified
@@ -117,7 +118,7 @@ end
     vac_period::Array{Int64,1} = [21;28;999]
     
     #=------------ Vaccine Efficacy ----------------------------=#
-    booster_after::Array{Int64,1} = [180;180;999]
+    booster_after::Array{Int64,1} = [150;150;999]
     n_boosts::Int64 = 1
     min_age_booster::Int64 = 16
     #=------------ Vaccine Efficacy ----------------------------=#
@@ -211,7 +212,7 @@ function runsim(simnum, ip::ModelParameters)
     range_work = 18:65
     ags = map(x-> x.age in range_work ? 1 : 2,humans)
 
-    all = _collectdf(hmatrix)
+    all1 = _collectdf(hmatrix)
     spl = _splitstate(hmatrix, ags)
     work = _collectdf(spl[1])
     
@@ -227,7 +228,7 @@ function runsim(simnum, ip::ModelParameters)
     ag7 = _collectdf(spl[7])
     ag8 = _collectdf(spl[8])
     ag9 = _collectdf(spl[9])
-    insertcols!(all, 1, :sim => simnum); insertcols!(ag1, 1, :sim => simnum); insertcols!(ag2, 1, :sim => simnum); 
+    insertcols!(all1, 1, :sim => simnum); insertcols!(ag1, 1, :sim => simnum); insertcols!(ag2, 1, :sim => simnum); 
     insertcols!(ag3, 1, :sim => simnum); insertcols!(ag4, 1, :sim => simnum); insertcols!(ag5, 1, :sim => simnum);
     insertcols!(ag6, 1, :sim => simnum); insertcols!(ag7, 1, :sim => simnum); insertcols!(ag8, 1, :sim => simnum); 
     insertcols!(ag9, 1, :sim => simnum); insertcols!(work, 1, :sim => simnum);
@@ -242,7 +243,7 @@ function runsim(simnum, ip::ModelParameters)
         vector_ded[(x.age+1)] += 1
     end
 
-    return (a=all, g1=ag1, g2=ag2, g3=ag3, g4=ag4, g5=ag5,g6=ag6,g7=ag7, work = work,
+    return (a=all1, g1=ag1, g2=ag2, g3=ag3, g4=ag4, g5=ag5,g6=ag6,g7=ag7, work = work,
     vector_dead=vector_ded,nra=nra,npcr=npcr)
 end
 export runsim
@@ -303,7 +304,7 @@ function main(ip::ModelParameters,sim::Int64)
         =#
         nra[st],npcr[st] = testing(testing_group,initial_dw)
         _get_model_state(st, hmatrix) ## this datacollection needs to be at the start of the for loop
-        dyntrans(st, grps,workplaces,schools,initial_dw,sim)
+        dyntrans(st, grps,workplaces,initial_dw,sim)
        
         sw = time_update() ###update the system
 
@@ -371,6 +372,7 @@ function select_testing_group(workplaces::Vector{Vector{Int64}})
         
         wpr = findall(x-> length(x) >= p.size_threshold,workplaces)
         grp = vcat(workplaces[wpr]...)
+
     elseif p.scenariotest == 2
         wpr = findall(x-> length(x) >= p.size_threshold,workplaces)
         grp = vcat(workplaces[wpr]...)
@@ -409,6 +411,7 @@ function testing(grp,dayweek)
                     if rand() > x.pcrprob
                         x.daysisolation = 999
                         x.tookpcr = false
+                        x.days_after_detection = 999
                     end
                 end
             end
@@ -428,6 +431,8 @@ function testing(grp,dayweek)
                         x.daysisolation = 999
                         x.tookpcr = false
                         x.days_after_detection = 999
+                    else 
+                        x.positive = true
                     end
                 end
             elseif x.test
@@ -451,6 +456,8 @@ function testing(grp,dayweek)
                         x.daysisolation = 999
                         x.tookpcr = false
                         x.days_after_detection = 999
+                    else
+                        x.positive = true
                     end
                 end
             end
@@ -469,6 +476,8 @@ function testing(grp,dayweek)
                     if rand() > x.pcrprob
                         x.daysisolation = 999
                         x.tookpcr = false
+                    else
+                        x.positive = true
                     end
                 end
             
@@ -480,6 +489,7 @@ function testing(grp,dayweek)
             if x.isovia == :symp
                 
                 pp = _get_prob_test(x,p.test_ra)
+                nra+=1
                 if rand() < pp
                     x.positive = true
                     _set_isolation(x,true,:test)
@@ -789,6 +799,7 @@ function insert_infected(health, num, ag,strain)
                 if health == PRE
                     x.swap = aux_pre[x.strain]
                     x.swap_status = PRE
+                    x.daysinf = x.dur[1]+1
                     move_to_pre(x) ## the swap may be asymp, mild, or severe, but we can force severe in the time_update function
                 elseif health == LAT
                     x.swap = aux_lat[x.strain]
@@ -856,7 +867,8 @@ function time_update()
         x.daysisolation += 1
         if x.iso && x.daysisolation >= p.isolation_days && !(x.health_status in (HOS,ICU,DED))
             _set_isolation(x,false,:null)
-            x.positive = false
+            #x.positive = false
+            x.tookpcr = false
         end
         if x.tis >= x.exp             
             @match Symbol(x.swap_status) begin
@@ -1285,6 +1297,7 @@ function move_to_inf(x::Human)
     
     x.tis = 0 
     if rand() < h     # going to hospital or ICU but will spend delta time transmissing the disease with full contacts 
+        _set_isolation(x, true, :symp)
         x.exp = time_to_hospital
         if rand() < c
             aux_v = [ICU;ICU2;ICU3;ICU4;ICU5;ICU6]
@@ -1349,7 +1362,7 @@ function move_to_iiso(x::Human)
     end
     #x.swap = x.strain == 1 ? REC : REC2
     x.tis = 0     ## reset time in state 
-    x.exp = x.dur[4] - τinf  ## since 1 day was spent as infectious
+    x.exp = x.dur[4] - p.τinf  ## since 1 day was spent as infectious
     _set_isolation(x, true, :symp)
     
 end 
@@ -1570,7 +1583,7 @@ export _get_betavalue
     return cnt
 end
 
-function dyntrans(sys_time, grps,workplaces,schools,initial_dw,sim)
+function dyntrans(sys_time, grps,workplaces,initial_dw,sim)
     totalmet = 0 # count the total number of contacts (total for day, for all INF contacts)
     totalinf = 0 # count number of new infected 
     ## find all the people infectious
@@ -1599,7 +1612,6 @@ function dyntrans(sys_time, grps,workplaces,schools,initial_dw,sim)
                 else
                     
                     gpw = Int.(round.(cm[x.ag]*cnts)) # split the counts over age groups
-                    
                     grp_sample = grps
                     
                 end
