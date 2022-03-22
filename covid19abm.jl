@@ -91,8 +91,6 @@ end
     
     #the cap for coverage should be 90% for 65+; 95% for HCW; 80% for 50-64; 60% for 16-49; and then 50% for 12-15 (starting from June 1).
     #comor_comp::Float64 = 0.7 #prop comorbidade tomam
-
-    
     vaccinating::Bool = true #vaccinating?
     
     ##Alpha - B.1.1.7
@@ -204,7 +202,7 @@ export ModelParameters, HEALTH, Human, humans, BETAS
 
 function runsim(simnum, ip::ModelParameters)
     # function runs the `main` function, and collects the data as dataframes. 
-    hmatrix, remaining_doses, total_given, unvac_rec,unvac_unrec,vac_1,vac_2,vac_3 = main(ip,simnum)            
+    hmatrix, nra, npcr = main(ip,simnum)            
 
     ###use here to create the vector of comorbidity
     # get simulation age groups
@@ -235,41 +233,6 @@ function runsim(simnum, ip::ModelParameters)
     insertcols!(ag9, 1, :sim => simnum); insertcols!(work, 1, :sim => simnum);
     
 
-    coverage1 = length(findall(x-> x.age >= 18 && x.vac_status >= 1,humans))/length(findall(x-> x.age >= 18,humans))
-    coverage2 = length(findall(x-> x.age >= 18 && x.vac_status == 2,humans))/length(findall(x-> x.age >= 18,humans))
-
-    coverage12 = length(findall(x-> x.vac_status >= 1,humans))/p.popsize
-    coverage22 = length(findall(x-> x.vac_status == 2,humans))/p.popsize
-
-    #### let's count the number of vaccines for each vaccine thaat was given
-    aux =  findall(x-> x.vaccine_n == 2, humans)
-    n_moderna = length(aux)
-    aux =  findall(x-> x.vaccine_n == 1, humans)
-    n_pfizer = length(aux)
-    aux =  findall(x-> x.vaccine_n == 3, humans)
-    n_jensen = length(aux)
-
-    aux =  findall(x-> x.vaccine_n == 2 && x.age in range_work, humans)
-    n_moderna_w = length(aux)
-    aux =  findall(x-> x.vaccine_n == 1 && x.age in range_work, humans)
-    n_pfizer_w = length(aux)
-    aux =  findall(x-> x.vaccine_n == 3 && x.age in range_work, humans)
-    n_jensen_w = length(aux)
-
-    aux =  findall(x-> x.vaccine_n == 2 && x.vac_status == 2, humans)
-    n_moderna_2 = length(aux)
-    aux =  findall(x-> x.vaccine_n == 1 && x.vac_status == 2, humans)
-    n_pfizer_2 = length(aux)
-    aux =  findall(x-> x.vaccine_n == 3 && x.vac_status == 2, humans)
-    n_jensen_2 = length(aux)
-
-    aux =  findall(x-> x.vaccine_n == 2 && x.age in range_work && x.vac_status == 2, humans)
-    n_moderna_w_2 = length(aux)
-    aux =  findall(x-> x.vaccine_n == 1 && x.age in range_work && x.vac_status == 2, humans)
-    n_pfizer_w_2 = length(aux)
-    aux =  findall(x-> x.vaccine_n == 3 && x.age in range_work && x.vac_status == 2, humans)
-    n_jensen_w_2 = length(aux)
-
     pos = findall(y-> y in (11,22,33,44,55,66),hmatrix[:,end])
 
     vector_ded::Vector{Int64} = zeros(Int64,100)
@@ -280,10 +243,7 @@ function runsim(simnum, ip::ModelParameters)
     end
 
     return (a=all, g1=ag1, g2=ag2, g3=ag3, g4=ag4, g5=ag5,g6=ag6,g7=ag7, work = work,
-    cov1 = coverage1,cov2 = coverage2,cov12 = coverage12,cov22 = coverage22,vector_dead=vector_ded,
-    unvac_nr = unvac_unrec, unvac_r=unvac_rec, vac_1 = vac_1,vac_2 = vac_2, vac_3 = vac_3,
-    n_pfizer = n_pfizer, n_moderna = n_moderna, n_jensen = n_jensen, n_pfizer_w = n_pfizer_w, n_moderna_w = n_moderna_w, n_jensen_w = n_jensen_w,
-    n_pfizer_2 = n_pfizer_2, n_moderna_2 = n_moderna_2, n_jensen_2 = n_jensen_2, n_pfizer_w_2 = n_pfizer_w_2, n_moderna_w_2 = n_moderna_w_2, n_jensen_w_2 = n_jensen_w_2, remaining = remaining_doses, total_given = total_given)
+    vector_dead=vector_ded,nra=nra,npcr=npcr)
 end
 export runsim
 
@@ -326,11 +286,8 @@ function main(ip::ModelParameters,sim::Int64)
     
     initial_dw::Int64 = p.initial_day_week
 
-    unvac_rec::Vector{Int64} = zeros(Int64,p.modeltime)
-    unvac_unrec::Vector{Int64} = zeros(Int64,p.modeltime)
-    vac_1::Vector{Int64} = zeros(Int64,p.modeltime)
-    vac_2::Vector{Int64} = zeros(Int64,p.modeltime)
-    vac_3::Vector{Int64} = zeros(Int64,p.modeltime)
+    nra::Vector{Int64} = zeros(Int64,p.modeltime)
+    npcr::Vector{Int64} = zeros(Int64,p.modeltime)
 
     testing_group::Vector{Int64} = select_testing_group(workplaces)
   
@@ -344,7 +301,7 @@ function main(ip::ModelParameters,sim::Int64)
             count_change += 1
         end
         =#
-        testing(testing_group,initial_dw)
+        nra[st],npcr[st] = testing(testing_group,initial_dw)
         _get_model_state(st, hmatrix) ## this datacollection needs to be at the start of the for loop
         dyntrans(st, grps,workplaces,schools,initial_dw,sim)
        
@@ -355,16 +312,11 @@ function main(ip::ModelParameters,sim::Int64)
             initial_dw = 1
         end
 
-        unvac_unrec[st] = sw[2]
-        unvac_rec[st] = sw[1]
-        vac_1[st] = sw[3]
-        vac_2[st] = sw[4]
-        vac_3[st] = sw[5]
         # end of day
     end
     
     
-    return hmatrix, unvac_rec,unvac_unrec,vac_1,vac_2,vac_3 ## return the model state as well as the age groups. 
+    return hmatrix, nra, npcr## return the model state as well as the age groups. 
 end
 export main
 
@@ -448,7 +400,7 @@ function testing(grp,dayweek)
             x.days_for_pcr -= 1
             if x.isovia == :symp
                 
-                if x.daysisolation == 0
+                if !x.tookpcr#x.daysisolation == 0
                     x.days_for_pcr = rand(1:2)
                     npcr+=1
                     x.pcrprob = _get_prob_test(x,1)
@@ -475,6 +427,7 @@ function testing(grp,dayweek)
                     if rand() > x.pcrprob
                         x.daysisolation = 999
                         x.tookpcr = false
+                        x.days_after_detection = 999
                     end
                 end
             elseif x.test
@@ -489,7 +442,6 @@ function testing(grp,dayweek)
                         x.days_for_pcr = rand(1:2)
                         npcr+=1
                         x.pcrprob = _get_prob_test(x,1)
-                    
                         
                     end
                     x.nra += 1
@@ -498,6 +450,7 @@ function testing(grp,dayweek)
                     if rand() > x.pcrprob
                         x.daysisolation = 999
                         x.tookpcr = false
+                        x.days_after_detection = 999
                     end
                 end
             end
