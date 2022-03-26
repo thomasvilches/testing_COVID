@@ -61,7 +61,7 @@ Base.@kwdef mutable struct Human
     test::Bool = false
     isolate::Bool = false
     waning::Vector{Float64} = [1.0;1.0]
-    
+    proportion_contacts_workplace::Float64 = 0.0    
 end
 
 ## default system parameters
@@ -169,13 +169,14 @@ end
     
     ##for testing
     initial_day_week::Int64 = 1 # 1- Monday ... 7- Sunday
-    testing_days::Vector{Int64} = [2;4;6]
+    testing_days::Vector{Int64} = [1;4]
     days_ex_test::Int64 = 90 ## 3 months without testing
     isolation_days::Int64 = 5 #how many days of isolation after testing
     test_ra::Int64 = 0 #1 - PCR, 2 - Abbott_PanBio 3 - 	BTNX_Rapid_Response	4 - Artron
     scenariotest::Int64 = 0
     size_threshold::Int64 = 100
     extra_booster::Int64 = 0
+    prop_working::Float64 = 0.7
 end
 
 Base.@kwdef mutable struct ct_data_collect
@@ -211,7 +212,7 @@ function runsim(simnum, ip::ModelParameters)
     #ags = [x.ag for x in humans] # store a vector of the age group distribution 
     #ags = [x.ag_new for x in humans] # store a vector of the age group distribution 
     range_work = 18:65
-    ags = map(x-> x.age in range_work ? 1 : 2,humans)
+    ags = map(x-> x.workplace > 0 ? 1 : 2,humans)
 
     all1 = _collectdf(hmatrix)
     spl = _splitstate(hmatrix, ags)
@@ -336,6 +337,7 @@ end
 ### I can change it to split basic, mid, and high
 function create_workplace() 
     pos = findall(x-> x.age in 20:65,humans)
+    pos = sample(pos,Int(round(length(pos)*p.prop_working)),replace = false)
     N = length(pos)
     
     probs,breaks = work_size()
@@ -767,6 +769,8 @@ export comorbidity
 function initialize() 
     agedist = get_province_ag(p.prov)
     agebraksnew = [0:4,5:14,15:24,25:34,35:44,45:54,55:64,65:74,75:84,85:99]
+    agebrak_work = [20:24,25:29,30:34,35:39,40:44,45:49,50:54,55:59,60:65]
+    work_prop = [0.4910;0.5825;0.5378;0.4852;0.5039;0.5039;0.4930;0.4501;0.3183]
     for i = 1:p.popsize 
         humans[i] = Human()              ## create an empty human       
         x = humans[i]
@@ -778,6 +782,8 @@ function initialize()
         g = findfirst(y->y>=x.age,a)
         x.ag_new = g
         x.exp = 999  ## susceptible people don't expire.
+        aa = findfirst(y-> x.age in y,agebrak_work)
+        x.proportion_contacts_workplace = work_prop[aa]
         #x.dur = sample_epi_durations() # sample epi periods   
         x.comorbidity = comorbidity(x.age)
         # initialize the next day counts (this is important in initialization since dyntrans runs first)
@@ -1613,18 +1619,24 @@ function dyntrans(sys_time, grps,workplaces,initial_dw,sim)
             cnts == 0 && continue # skip person if no contacts
 
             #cnts = number of contacts on that day
-            if !x.iso && initial_dw ∉ (6,7) ###if no isolated and working days
+            if !x.iso
 
                 if x.workplace_idx > 0 
                     #workplace contacts
-                    cnts_w = Int(round(cnts*(p.proportion_contacts_workplace)))
+                    cnts_w = Int(round(cnts*(x.proportion_contacts_workplace)))
                     #general population contact
                     cnts = cnts-cnts_w 
 
                     gpw = Int.(round.(cm[x.ag]*cnts)) # split the counts over age groups
-                    gpw = [gpw;cnts_w]
-        
-                    grp_sample = [grps;[workplaces[x.workplace_idx]]]
+
+                    if initial_dw ∉ (6,7) ###if no isolated and working days
+                        gpw = [gpw;cnts_w]
+            
+                        grp_sample = [grps;[workplaces[x.workplace_idx]]]
+                    else
+                        gpw = Int.(round.(cm[x.ag]*cnts)) # split the counts over age groups
+                        grp_sample = grps
+                    end
                     
                 else
                     
@@ -1729,11 +1741,11 @@ function contact_matrix()
     # regular contacts, just with 5 age groups. 
     #  0-4, 5-19, 20-49, 50-64, 65+
     CM = Array{Array{Float64, 1}, 1}(undef, 5)
-     CM[1] = [0.2287, 0.1839, 0.4219, 0.1116, 0.0539]
-    CM[2] = [0.0276, 0.5964, 0.2878, 0.0591, 0.0291]
-    CM[3] = [0.0376, 0.1454, 0.6253, 0.1423, 0.0494]
-    CM[4] = [0.0242, 0.1094, 0.4867, 0.2723, 0.1074]
-    CM[5] = [0.0207, 0.1083, 0.4071, 0.2193, 0.2446] 
+    CM[1] = [0.33,0.15,0.37,0.12,0.04]
+    CM[2] = [0.04,0.49,0.35,0.08,0.04]
+    CM[3] = [0.04,0.16,0.56,0.16,0.07]
+    CM[4] = [0.04,0.11,0.43,0.26,0.16]
+    CM[5] = [0.02,0.06,0.27,0.22,0.44] 
    
     return CM
 end
@@ -1744,8 +1756,9 @@ end
 
 function negative_binomials(ag,mult) 
     ## the means/sd here are calculated using _calc_avgag
-    means = [10.21, 16.793, 13.7950, 11.2669, 8.0027]
-    sd = [7.65, 11.7201, 10.5045, 9.5935, 6.9638]
+    # [0:4, 5:19, 20:49, 50:64, 65:99]
+    means = [5.33;8.29;11.73;9.23;3.69]
+    sd = [3.99;5.79;8.94;7.86;3.21]
     means = means*mult
     totalbraks = length(means)
     nbinoms = Vector{NegativeBinomial{Float64}}(undef, totalbraks)
@@ -1777,37 +1790,6 @@ function negative_binomials_shelter(ag,mult)
         nbinoms[i] =  NegativeBinomial(r, p)
     end
     return nbinoms[ag]   
-end
-## internal functions to do intermediate calculations
-function _calc_avgag(lb, hb) 
-    ## internal function to calculate the mean/sd of the negative binomials
-    ## returns a vector of sampled number of contacts between age group lb to age group hb
-    dists = _negative_binomials_15ag()[lb:hb]
-    totalcon = Vector{Int64}(undef, 0)
-    for d in dists 
-        append!(totalcon, rand(d, 10000))
-    end    
-    return totalcon
-end
-export _calc_avgag
-
-function _negative_binomials_15ag()
-    ## negative binomials 15 agegroups
-    AgeMean = Vector{Float64}(undef, 15)
-    AgeSD = Vector{Float64}(undef, 15)
-    #0-4, 5-9, 10-14, 15-19, 20-24, 25-29, 30-34, 35-39, 40-44, 45-49, 50-54, 55-59, 60-64, 65-69, 70+
-    #= AgeMean = [10.21, 14.81, 18.22, 17.58, 13.57, 13.57, 14.14, 14.14, 13.83, 13.83, 12.3, 12.3, 9.21, 9.21, 6.89]
-    AgeSD = [7.65, 10.09, 12.27, 12.03, 10.6, 10.6, 10.15, 10.15, 10.86, 10.86, 10.23, 10.23, 7.96, 7.96, 5.83]
-     =#
-     AgeMean = repeat([14.14],15)#[10.21, 14.81, 18.22, 17.58, 13.57, 13.57, 14.14, 14.14, 13.83, 13.83, 12.3, 12.3, 9.21, 9.21, 6.89]
-    AgeSD = repeat([10.86],15)#[7.65, 10.09, 12.27, 12.03, 10.6, 10.6, 10.15, 10.15, 10.86, 10.86, 10.23, 10.23, 7.96, 7.96, 5.83]
-    nbinoms = Vector{NegativeBinomial{Float64}}(undef, 15)
-    for i = 1:15
-        p = 1 - (AgeSD[i]^2-AgeMean[i])/(AgeSD[i]^2)
-        r = AgeMean[i]^2/(AgeSD[i]^2-AgeMean[i])
-        nbinoms[i] =  NegativeBinomial(r, p)
-    end
-    return nbinoms    
 end
 
 #const vaccination_days = days_vac_f()
