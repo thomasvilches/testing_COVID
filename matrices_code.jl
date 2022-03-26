@@ -2427,15 +2427,7 @@ function distribute_vaccine(M1,M2,B)
 end
 
 function _get_prob_test(x::Human,test::Int64)
-    
-    if x.daysinf == 999
-        d = 1
-        M = [0.5 0.5 0.5 0.5]
-        prob = M[1,test]
-    else
-        #Let's create a Tuple with one matrix for each strain
-        d = x.daysinf+1 #first row is 0
-        M = [
+    M = [
                 [   0.0 0.0 0.0 0.0
                     0.009313509049	0.006866032934	0.007803657586	0.006417272611
                     0.2133219625	0.1674016942	0.1849936843	0.156460407
@@ -2532,8 +2524,14 @@ function _get_prob_test(x::Human,test::Int64)
                     0.00579289648	0.0007972126095	0.002711052064	0.0007451072101
                     0.004878778883	0.0005929083608	0.002234819322	0.0005541561804
                 ]
-        ] #end M
-        
+    ] #end M
+    if x.daysinf+1 > size(M[1],1)
+        d = 1
+        pp = [0.05 0.05 0.05 0.05]
+        prob = pp[1,test]
+    else
+        #Let's create a Tuple with one matrix for each strain
+        d = x.daysinf+1 #first row is 0
         prob = M[p.strain_test][d,test]
     end
 

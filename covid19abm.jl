@@ -1,4 +1,4 @@
-#module covid19abm
+module covid19abm
 using Base
 using Parameters, Distributions, StatsBase, StaticArrays, Random, Match, DataFrames
 @enum HEALTH SUS LAT PRE ASYMP MILD MISO INF IISO HOS ICU REC DED  LAT2 PRE2 ASYMP2 MILD2 MISO2 INF2 IISO2 HOS2 ICU2 REC2 DED2 LAT3 PRE3 ASYMP3 MILD3 MISO3 INF3 IISO3 HOS3 ICU3 REC3 DED3 LAT4 PRE4 ASYMP4 MILD4 MISO4 INF4 IISO4 HOS4 ICU4 REC4 DED4 LAT5 PRE5 ASYMP5 MILD5 MISO5 INF5 IISO5 HOS5 ICU5 REC5 DED5 LAT6 PRE6 ASYMP6 MILD6 MISO6 INF6 IISO6 HOS6 ICU6 REC6 DED6 UNDEF
@@ -59,6 +59,7 @@ Base.@kwdef mutable struct Human
     nra::Int64 = 0
     pcrprob::Float64 = 0.0
     test::Bool = false
+    isolate::Bool = false
     waning::Vector{Float64} = [1.0;1.0]
     
 end
@@ -152,7 +153,7 @@ end
     status_relax::Int16 = 2
     relax_after::Int64 = 1
 
-    turnon::Int64 = 0
+    turnon::Int64 = 1
 
     day_inital_vac::Int64 = 104 ###this must match to the matrices in matrice code
     time_vac_kids::Int64 = 253
@@ -373,21 +374,31 @@ function select_testing_group(workplaces::Vector{Vector{Int64}})
         wpr = findall(x-> length(x) >= p.size_threshold,workplaces)
         grp = vcat(workplaces[wpr]...)
 
+        grp_iso = deepcopy(grp)
     elseif p.scenariotest == 2
         wpr = findall(x-> length(x) >= p.size_threshold,workplaces)
         grp = vcat(workplaces[wpr]...)
+
+        grp_iso = 1:length(humans)
     elseif p.scenariotest == 3
         grp = 1:length(humans)
+        grp_iso = deepcopy(grp)
     elseif p.scenariotest == 4
         grp = 1:length(humans)
+        grp_iso = deepcopy(grp)
     elseif p.scenariotest == 0
         grp = []
+        grp_iso = deepcopy(grp)
     else
         error("error in testing group")
     end
     
     for i in grp
         humans[i].test = true
+    end
+
+    for i in grp_iso
+        humans[i].isolate = true
     end
 
     return grp
@@ -401,7 +412,6 @@ function testing(grp,dayweek)
         for x in humans[grp]
             x.days_for_pcr -= 1
             if x.isovia == :symp
-                
                 if !x.tookpcr#x.daysisolation == 0
                     x.days_for_pcr = rand(1:2)
                     npcr+=1
@@ -412,6 +422,8 @@ function testing(grp,dayweek)
                         x.daysisolation = 999
                         x.tookpcr = false
                         x.days_after_detection = 999
+                    else 
+                        x.positive = true
                     end
                 end
             end
@@ -420,7 +432,6 @@ function testing(grp,dayweek)
         for x in humans
             x.days_for_pcr -= 1
             if x.isovia == :symp
-                
                 if !x.tookpcr#x.daysisolation == 0
                     x.days_for_pcr = rand(1:2)
                     npcr+=1
@@ -476,6 +487,7 @@ function testing(grp,dayweek)
                     if rand() > x.pcrprob
                         x.daysisolation = 999
                         x.tookpcr = false
+                        x.days_after_detection = 999
                     else
                         x.positive = true
                     end
@@ -490,9 +502,12 @@ function testing(grp,dayweek)
                 
                 pp = _get_prob_test(x,p.test_ra)
                 nra+=1
-                if rand() < pp
+                if rand() > pp
+                    x.daysisolation = 999
+                    x.tookpcr = false
+                    x.days_after_detection = 999
+                else
                     x.positive = true
-                    _set_isolation(x,true,:test)
                 end
             
             end
@@ -1199,7 +1214,7 @@ function move_to_miso(x::Human)
     x.tis = 0 
     x.exp = x.dur[4] - p.τmild  ## since tau amount of days was already spent as infectious
     
-    _set_isolation(x, true, :symp)
+    x.isolate && _set_isolation(x, true, :symp)
    
 end
 export move_to_miso
@@ -1215,7 +1230,7 @@ function move_to_infsimple(x::Human)
     x.swap = aux_v[x.strain]
     x.swap_status = REC
     #x.swap = x.strain == 1 ? REC : REC2
-    _set_isolation(x, false, :null) 
+    #_set_isolation(x, false, :null) 
 end
 
 function move_to_inf(x::Human)
@@ -1297,7 +1312,7 @@ function move_to_inf(x::Human)
     
     x.tis = 0 
     if rand() < h     # going to hospital or ICU but will spend delta time transmissing the disease with full contacts 
-        _set_isolation(x, true, :symp)
+        x.isolate && _set_isolation(x, true, :symp)
         x.exp = time_to_hospital
         if rand() < c
             aux_v = [ICU;ICU2;ICU3;ICU4;ICU5;ICU6]
@@ -1363,7 +1378,7 @@ function move_to_iiso(x::Human)
     #x.swap = x.strain == 1 ? REC : REC2
     x.tis = 0     ## reset time in state 
     x.exp = x.dur[4] - p.τinf  ## since 1 day was spent as infectious
-    _set_isolation(x, true, :symp)
+    x.isolate && _set_isolation(x, true, :symp)
     
 end 
 
@@ -1597,11 +1612,13 @@ function dyntrans(sys_time, grps,workplaces,initial_dw,sim)
             cnts = x.nextday_meetcnt
             cnts == 0 && continue # skip person if no contacts
 
+            #cnts = number of contacts on that day
             if !x.iso && initial_dw ∉ (6,7) ###if no isolated and working days
 
                 if x.workplace_idx > 0 
-                    
+                    #workplace contacts
                     cnts_w = Int(round(cnts*(p.proportion_contacts_workplace)))
+                    #general population contact
                     cnts = cnts-cnts_w 
 
                     gpw = Int.(round.(cm[x.ag]*cnts)) # split the counts over age groups
@@ -1616,6 +1633,7 @@ function dyntrans(sys_time, grps,workplaces,initial_dw,sim)
                     
                 end
             else
+                #contacts general population => weekend
                 gpw = Int.(round.(cm[x.ag]*cnts)) # split the counts over age groups
                 grp_sample = grps 
             end
@@ -1797,4 +1815,4 @@ end
 #const vac_rate_2 = vaccination_rate_2()
 ## references: 
 # critical care capacity in Canada https://www.ncbi.nlm.nih.gov/pubmed/25888116
-#end # module end
+end # module end

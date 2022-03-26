@@ -93,10 +93,10 @@ end
 function create_folder(ip::cv.ModelParameters,province="ontario")
     
     #RF = string("heatmap/results_prob_","$(replace(string(ip.β), "." => "_"))","_vac_","$(replace(string(ip.vaccine_ef), "." => "_"))","_herd_immu_","$(ip.herd)","_$strategy","cov_$(replace(string(ip.cov_val)))") ## 
-    main_folder = "/data/thomas-covid/cost_testing"
+    main_folder = "/data/thomas-covid/testing_canada"
     #main_folder = "."
     
-    RF = string(main_folder,"/results_prob_","$(replace(string(ip.β), "." => "_"))","_herd_immu_","$(ip.herd)","_$(ip.file_index)_$(province)_$(ip.scenatiotest)_$(ip.test_ra)_$(ip.extra_booster)_$(ip.size_threshold)") ##  
+    RF = string(main_folder,"/results_prob_","$(replace(string(ip.β), "." => "_"))","_herd_immu_","$(ip.herd)","_idx_$(ip.file_index)_$(province)_strain_$(ip.strain)_scen_$(ip.scenariotest)_test_$(ip.test_ra)_eb_$(ip.extra_booster)_size_$(ip.size_threshold)") ##  
     
     if !Base.Filesystem.isdir(RF)
         Base.Filesystem.mkpath(RF)
@@ -106,7 +106,7 @@ end
 
 
 
-function run_param_scen_cal(b::Float64,province::String="ontario",h_i::Int64 = 0,ic1::Int64=1,index::Int64 = 0,scen::Int64 = 0,tra::Int64 = 0,eb::Int64 = 0,wpt::Int64 = 100,dayst::Vector{Int64} = [2;4;6],rc=[1.0],dc=[1],mt::Int64=500,vac::Bool=true,nsims::Int64=500)
+function run_param_scen_cal(b::Float64,province::String="ontario",h_i::Int64 = 0,ic1::Int64=1,strains::Int64 = 1,index::Int64 = 0,scen::Int64 = 0,tra::Int64 = 0,eb::Int64 = 0,wpt::Int64 = 100,wpc::Float64 = 0.0,dayst::Vector{Int64} = [1;4],rc=[1.0],dc=[1],mt::Int64=300,vac::Bool=true,nsims::Int64=500)
     
     
     @everywhere ip = cv.ModelParameters(β=$b,fsevere = 1.0,fmild = 1.0,vaccinating = $vac,
@@ -117,12 +117,13 @@ function run_param_scen_cal(b::Float64,province::String="ontario",h_i::Int64 = 0
     time_change_contact = $dc,
     change_rate_values = $rc,
     n_boosts = 1,
-    turnon = $turnon_,
     scenariotest = $scen,
     extra_booster = $eb,
     size_threshold = $wpt,
     test_ra = $tra,
-    testing_days = $dayst)
+    testing_days = $dayst,
+    strain = $strains,
+    proportion_contacts_workplace = $wpc)
 
     folder = create_folder(ip,province)
 
