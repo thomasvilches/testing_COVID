@@ -295,7 +295,7 @@ function main(ip::ModelParameters,sim::Int64)
 
     testing_group::Vector{Int64} = select_testing_group(workplaces)
   
-    insert_infected(PRE, p.initialinf, 4, ip.strain)[1]
+    insert_infected(LAT, p.initialinf, 4, ip.strain)[1]
     h_init1 = findall(x->x.health_status  in (LAT,MILD,INF,PRE,ASYMP),humans)
     ## save the preisolation isolation parameters
    
@@ -1728,7 +1728,7 @@ function dyntrans(sys_time, grps,workplaces,initial_dw,sim)
                         totalinf += 1
                         y.exp = y.tis   ## force the move to latent in the next time step.
                         y.sickfrom = xhealth ## stores the infector's status to the infectee's sickfrom
-                        y.sickby = x.sickby < 0 ? x.idx : x.sickby
+                        y.sickby = y.sickby < 0 ? x.idx : y.sickby
                         y.strain = x.strain       
                         aux_v = [LAT;LAT2;LAT3;LAT4;LAT5;LAT6]
                         y.swap = aux_v[y.strain]
