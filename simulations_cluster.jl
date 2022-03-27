@@ -18,7 +18,7 @@ using DelimitedFiles
 
 #@everywhere using covid19abm
 
-addprocs(SlurmManager(512), N=16, topology=:master_worker, exeflags = "--project=.")
+addprocs(SlurmManager(250), N=8, topology=:master_worker, exeflags = "--project=.")
 @everywhere using Parameters, Distributions, StatsBase, StaticArrays, Random, Match, DataFrames
 @everywhere include("covid19abm.jl")
 @everywhere const cv=covid19abm
@@ -80,8 +80,9 @@ function run(myp::cv.ModelParameters, nsims=1000, folderprefix="./")
         #fn = string("$(folderprefix)/timelevel_", k, ".dat")   
         #CSV.write(fn, yaf)       
     end
-    
 
+    
+    writedlm(string(folderprefix,"/R01.dat"),[cdr[i].R0 for i=1:nsims])
     writedlm(string(folderprefix,"/year_of_death.dat"),hcat([cdr[i].vector_dead for i=1:nsims]...))
     writedlm(string(folderprefix,"/npcr.dat"),hcat([cdr[i].npcr for i=1:nsims]...))
     writedlm(string(folderprefix,"/nra.dat"),hcat([cdr[i].nra for i=1:nsims]...))
@@ -106,7 +107,7 @@ end
 
 
 
-function run_param_scen_cal(b::Float64,province::String="ontario",h_i::Int64 = 0,ic1::Int64=1,strains::Int64 = 1,index::Int64 = 0,scen::Int64 = 0,tra::Int64 = 0,eb::Int64 = 0,wpt::Int64 = 100,wpc::Float64 = 0.0,dayst::Vector{Int64} = [1;4],rc=[1.0],dc=[1],mt::Int64=300,vac::Bool=true,nsims::Int64=500)
+function run_param_scen_cal(b::Float64,province::String="ontario",h_i::Int64 = 0,ic1::Int64=1,strains::Int64 = 1,index::Int64 = 0,scen::Int64 = 0,tra::Int64 = 0,eb::Int64 = 0,wpt::Int64 = 100,dayst::Vector{Int64} = [1;4],trans_omicron::Float64 = 1.0,immu_omicron::Float64 = 0.0,rc=[1.0],dc=[1],mt::Int64=300,vac::Bool=true,nsims::Int64=500)
     
     
     @everywhere ip = cv.ModelParameters(β=$b,fsevere = 1.0,fmild = 1.0,vaccinating = $vac,
@@ -123,7 +124,8 @@ function run_param_scen_cal(b::Float64,province::String="ontario",h_i::Int64 = 0
     test_ra = $tra,
     testing_days = $dayst,
     strain = $strains,
-    proportion_contacts_workplace = $wpc)
+    immunity_omicron = $immu_omicron,
+    transmissibility_omicron = $trans_omicron)
 
     folder = create_folder(ip,province)
 

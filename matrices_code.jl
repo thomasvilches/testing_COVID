@@ -2373,52 +2373,54 @@ function distribute_vaccine(M1,M2,B)
     ## Let's boost a XX% of the population on day 0, following the order of the
     # earlier vaccinated to the later
 
+    ## Let's find the number of boosted people
+    pos = findall(y-> y.n_boosted == 1,humans)
+    NN = Int(round(length(pos)*(p.extra_booster/100))) # This is the number of extra booster we want to give
+
+    ##Let's find everybody who can be boosted
     pos = findall(y-> y.vac_status == 2 && y.n_boosted == 0 && y.age >= p.min_age_booster,humans)
 
     days = [x.days_vac for x in humans[pos]]
     pos_days = sortperm(days,rev=true)
     ranpos = pos[pos_days]
 
-    if Int(round(p.extra_booster/100*p.popsize)) > length(ranpos)
-        error("not enough fully vaccinated")
-    else
+    NN = min(NN,length(ranpos)) ## making sure we are capping the boosters
+    for i in ranpos[1:NN]
+        x = humans[i]
+        x.days_vac = 0 ##rand the day
+        x.protected = length(p.days_to_protection[x.vaccine_n][x.vac_status])
+        x.index_day = min(length(p.days_to_protection[x.vaccine_n][x.vac_status]),x.protected+1)
+        x.n_boosted += 1
+        x.boosted = true
+        #### ADD here the new vaccine efficacy against Omicron for booster
+            
+        x.vac_eff_inf[6][2][end] = [0.76;0.677][x.vaccine_n]
+        x.vac_eff_symp[6][2][end] = 0.82
+        x.vac_eff_sev[6][2][end] = 0.90
+        #moderna has a different value against Delta for booster
+        x.vac_eff_inf[4][2][end] = [x.vac_eff_inf[4][2][end]; 0.94][x.vaccine_n]
 
-        for i in ranpos[1:Int(round(p.extra_booster/100*p.popsize))]
-            x = humans[i]
-            x.days_vac = 0 ##rand the day
-            x.protected = length(p.days_to_protection[x.vaccine_n][x.vac_status])
-            x.index_day = min(length(p.days_to_protection[x.vaccine_n][x.vac_status]),x.protected+1)
-            x.n_boosted += 1
-            x.boosted = true
-            #### ADD here the new vaccine efficacy against Omicron for booster
-                
-            x.vac_eff_inf[6][2][end] = [0.76;0.677][x.vaccine_n]
-            x.vac_eff_symp[6][2][end] = 0.82
-            x.vac_eff_sev[6][2][end] = 0.90
-            #moderna has a different value against Delta for booster
-            x.vac_eff_inf[4][2][end] = [x.vac_eff_inf[4][2][end]; 0.94][x.vaccine_n]
+        if x.recovered
+            index = Int(floor(x.days_recovered/7))
 
-            if x.recovered
-                index = Int(floor(x.days_recovered/7))
-
-                if index > 0
-                    if index <= size(waning_factors_rec,1)
-                        aux = waning_factors_rec[index,1]
-                    else
-                        aux = waning_factors_rec[end,1]
-                    end
+            if index > 0
+                if index <= size(waning_factors_rec,1)
+                    aux = waning_factors_rec[index,1]
                 else
-                    aux = 1.0
+                    aux = waning_factors_rec[end,1]
                 end
+            else
+                aux = 1.0
+            end
 
-                if aux > x.vac_eff_inf[1][x.vac_status][end]
-                    x.recvac = 1
-                else
-                    x.recvac = 2
-                end
+            if aux > x.vac_eff_inf[1][x.vac_status][end]
+                x.recvac = 1
+            else
+                x.recvac = 2
             end
         end
     end
+  
 
     for x in humans
         vac_update(x)

@@ -108,7 +108,9 @@ end
     fifth_strain_trans::Float64 = 1.35 #transmissibility of fifth strain
 
     ##OMICRON
-    rel_trans_sixth::Float64 = 1.35
+    transmissibility_omicron::Float64 = 1.0
+    immunity_omicron::Float64 = 0.0
+    rel_trans_sixth::Float64 = transmissibility_omicron*1.35
     sixth_strain_trans::Float64 = rel_trans_sixth*sec_strain_trans*fourth_strain_trans #transmissibility of sixth strain
     reduction_sev_omicron::Float64 = 0.752 ##reduction of severity compared to Delta
 
@@ -165,7 +167,6 @@ end
     waning::Int64 = 1
     ### after calibration, how much do we want to increase the contact rate... in this case, to reach 70%
     ### 0.5*0.95 = 0.475, so we want to multiply this by 1.473684211
-    proportion_contacts_workplace::Float64 = 0.0
     
     ##for testing
     initial_day_week::Int64 = 1 # 1- Monday ... 7- Sunday
@@ -176,7 +177,7 @@ end
     scenariotest::Int64 = 0
     size_threshold::Int64 = 100
     extra_booster::Int64 = 0
-    prop_working::Float64 = 0.7
+    prop_working::Float64 = 0.65 #https://www.ontario.ca/document/ontario-employment-reports/april-june-2021#:~:text=Ontario's%20overall%20labour%20force%20participation,years%20and%20over%20at%2038.8%25.
 end
 
 Base.@kwdef mutable struct ct_data_collect
@@ -205,14 +206,18 @@ export ModelParameters, HEALTH, Human, humans, BETAS
 
 function runsim(simnum, ip::ModelParameters)
     # function runs the `main` function, and collects the data as dataframes. 
-    hmatrix, nra, npcr = main(ip,simnum)            
+    hmatrix, hh1, nra, npcr = main(ip,simnum)            
 
+    #Get the R0
+    
+    R01 = length(findall(k -> k.sickby in hh1,humans))/length(hh1)
+    
     ###use here to create the vector of comorbidity
     # get simulation age groups
     #ags = [x.ag for x in humans] # store a vector of the age group distribution 
     #ags = [x.ag_new for x in humans] # store a vector of the age group distribution 
     range_work = 18:65
-    ags = map(x-> x.workplace > 0 ? 1 : 2,humans)
+    ags = map(x-> x.workplace_idx > 0 ? 1 : 2,humans)
 
     all1 = _collectdf(hmatrix)
     spl = _splitstate(hmatrix, ags)
@@ -246,7 +251,7 @@ function runsim(simnum, ip::ModelParameters)
     end
 
     return (a=all1, g1=ag1, g2=ag2, g3=ag3, g4=ag4, g5=ag5,g6=ag6,g7=ag7, work = work,
-    vector_dead=vector_ded,nra=nra,npcr=npcr)
+    vector_dead=vector_ded,nra=nra,npcr=npcr, R0 = R01)
 end
 export runsim
 
@@ -277,10 +282,6 @@ function main(ip::ModelParameters,sim::Int64)
 
     herd_immu_dist_4(sim,1)
     distribute_vaccine(vac_rate_1,vac_rate_2,vac_rate_booster)
-    insert_infected(PRE, p.initialinf, 4, ip.strain)[1]
-    
-    ## save the preisolation isolation parameters
-   
 
     # split population in agegroups 
     grps = get_ag_dist()
@@ -294,7 +295,10 @@ function main(ip::ModelParameters,sim::Int64)
 
     testing_group::Vector{Int64} = select_testing_group(workplaces)
   
-
+    insert_infected(PRE, p.initialinf, 4, ip.strain)[1]
+    h_init1 = findall(x->x.health_status  in (LAT,MILD,INF,PRE,ASYMP),humans)
+    ## save the preisolation isolation parameters
+   
     
     # start the time loop
     for st = 1:p.modeltime
@@ -319,7 +323,7 @@ function main(ip::ModelParameters,sim::Int64)
     end
     
     
-    return hmatrix, nra, npcr## return the model state as well as the age groups. 
+    return hmatrix, h_init1, nra, npcr## return the model state as well as the age groups. 
 end
 export main
 
@@ -783,7 +787,9 @@ function initialize()
         x.ag_new = g
         x.exp = 999  ## susceptible people don't expire.
         aa = findfirst(y-> x.age in y,agebrak_work)
-        x.proportion_contacts_workplace = work_prop[aa]
+        if aa != nothing
+            x.proportion_contacts_workplace = work_prop[aa]
+        end
         #x.dur = sample_epi_durations() # sample epi periods   
         x.comorbidity = comorbidity(x.age)
         # initialize the next day counts (this is important in initialization since dyntrans runs first)
@@ -825,10 +831,12 @@ function insert_infected(health, num, ag,strain)
                 elseif health == LAT
                     x.swap = aux_lat[x.strain]
                     x.swap_status = LAT
+                    x.daysinf = rand(1:x.dur[1])
                     move_to_latent(x)
                 elseif health == MILD
                     x.swap =  aux_mild[x.strain] 
                     x.swap_status = MILD
+                    x.daysinf = x.dur[2]+1
                     move_to_mild(x)
                 elseif health == INF
                     x.swap = aux_inf[x.strain]
@@ -1662,8 +1670,9 @@ function dyntrans(sys_time, grps,workplaces,initial_dw,sim)
                     y.nextday_meetcnt = y.nextday_meetcnt - 1 # remove a contact
                     totalmet += 1
                     
-                    beta = _get_betavalue(sys_time, xhealth)
-                    adj_beta = 0 # adjusted beta value by strain and vaccine efficacy
+                    
+                    #adj_beta = 0 # adjusted beta value by strain and vaccine efficacy
+                    aux = 0
                     if y.health == SUS && y.swap == UNDEF
                         if y.vac_status*y.protected > 0
                             aux = y.vac_eff_inf[x.strain][y.vac_status][y.protected]*y.waning[1]
@@ -1671,14 +1680,11 @@ function dyntrans(sys_time, grps,workplaces,initial_dw,sim)
                         else
                             aux = 0.0
                         end
-                         
-                        adj_beta = beta*(1-aux)
-
+                        beta = _get_betavalue(sys_time, xhealth)
                     elseif y.health_status == REC && y.swap == UNDEF
                         index = Int(floor(y.days_recovered/7))
                         aux_red = 0.0
-                       
-
+                    
                         if y.recvac == 1
 
                             if index > 0
@@ -1712,15 +1718,17 @@ function dyntrans(sys_time, grps,workplaces,initial_dw,sim)
                                 aux = p.rec_eff_inf[x.strain]*aux
                             end
                         end
-
-                        adj_beta = beta*(1-aux)
+                        beta = _get_betavalue(sys_time, xhealth)
+                    else
+                        beta = 0.0
                     end
+                    adj_beta = beta*(1-aux*(1-p.immunity_omicron))
 
                     if rand() < adj_beta
                         totalinf += 1
                         y.exp = y.tis   ## force the move to latent in the next time step.
                         y.sickfrom = xhealth ## stores the infector's status to the infectee's sickfrom
-                        y.sickby = x.idx
+                        y.sickby = x.sickby < 0 ? x.idx : x.sickby
                         y.strain = x.strain       
                         aux_v = [LAT;LAT2;LAT3;LAT4;LAT5;LAT6]
                         y.swap = aux_v[y.strain]
