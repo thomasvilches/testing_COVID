@@ -167,7 +167,7 @@ end
     waning::Int64 = 1
     ### after calibration, how much do we want to increase the contact rate... in this case, to reach 70%
     ### 0.5*0.95 = 0.475, so we want to multiply this by 1.473684211
-    
+    hosp_red::Float64 = 3.1
     ##for testing
     initial_day_week::Int64 = 1 # 1- Monday ... 7- Sunday
     testing_days::Vector{Int64} = [1;4]

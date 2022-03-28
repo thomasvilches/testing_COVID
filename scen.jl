@@ -3,10 +3,11 @@
 dc = [1]
 rc = [1.0]
 #run_param_scen_cal(b,province,h_i,ic1,strains,index,scen,tra,eb,wpt,dayst,rc,dc,mt,vac,nsims)
-run_param_scen_cal(0.121,"ontario",25,1,1,1,0,0,0,100,[1],1.0,0.0,[1.0],[1],300)
+run_param_scen_cal(0.035,"ontario",10,1,6,2,0,0,0,100,[1],1.0,0.0,[1.0],[1],50)
+run_param_scen_cal(0.035,"ontario",10,1,6,1,0,0,0,100,[1],1.0,0.0,[1.0],[1],500)
+#0.35 for omicron generates a R0 of 0.84
 
-
-
+##### Scenarios
 #for the paper
 dc = [1]
 rc = [1.0]
