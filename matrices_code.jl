@@ -2537,7 +2537,7 @@ function _get_prob_test(x::Human,test::Int64)
     else
         #Let's create a Tuple with one matrix for each strain
         d = x.daysinf+1 #first row is 0
-        prob = M[p.strain_test][d,test]
+        prob = M[x.strain][d,test]
     end
 
     

@@ -311,4 +311,70 @@ head(df_f)
   v = c(pfizer,moderna)
   
   v/sum(v)
-z  
+
+  
+
+# Contact Distribution ----------------------------------------------------
+  
+  data.file = read.csv("data/age-distribution.csv") #https://www150.statcan.gc.ca/t1/tbl1/en/tv.action?pid=1710000501
+  
+  y = data.file[,6]
+  y
+  age = as.numeric(gsub(",", "", y))
+  
+  data = data.frame(group=data.file[,1],count = age)
+  
+  
+  together_group = c("80 to 84 years","85 to 89 years","90 to 94 years","95 to 99 years","100 years and over")
+  g10 = data %>% filter(group %in% together_group) %>% pull(count) %>% sum()
+  
+  df = data %>% filter(!(group %in% together_group)) %>% rbind(data.frame(group=c("80 and over"),count = c(g10))) %>%
+    filter(group != "All ages")
+  
+  
+  
+  data.contact = readxl::read_excel("data/CONNECT1_Mixing matrices_20210512 copy.xlsx",sheet = "Total",skip = 1)
+  data.contact = data.contact[,-1]
+  #[0:4, 5:19, 20:49, 50:64, 65:99]
+  group_idx = list(1,c(2,3,4),c(5,6,7,8,9,10),c(11,12,13),c(14,15,16,17))
+  
+  #Let's create a matrix with the weighted average of the columns based on age groups
+  
+  fwm <- function(x){
+    pp = df$count[x]/sum(df$count[x])
+    cc = as.matrix(data.contact[,x]) %*% t(t(pp))
+    ct = lapply(group_idx, function(y) sum(cc[y,])) %>% do.call("rbind",.)
+    return(ct)
+  }
+  
+  lcontacts = lapply(group_idx, fwm) %>% do.call("cbind",.)
+  
+  ncontacts = colSums(lcontacts)
+  pmatrix = lapply(1:5, function(x) (lcontacts[,x]/ncontacts[x])) %>% do.call("cbind",.)
+  t(pmatrix)
+  colSums(pmatrix)  
+  
+  mean0 = c(10.21,
+            16.79,
+            13.79,
+            11.26,
+            8.00)
+  sd_0 = c(7.65,
+           11.72,
+           10.50,
+           9.59,
+           6.96)
+  
+  
+  (sd = ncontacts/mean0*sd_0)
+  shelter = c(2.86, 4.7, 3.86, 3.15, 2.24)
+  shelter/mean0  
+  
+  sd_shelter = c(2.14, 3.28, 2.94, 2.66, 1.95)
+  
+  sd_shelter/sd_0
+  
+  sd*0.28
+  ncontacts*0.28
+  
+  
