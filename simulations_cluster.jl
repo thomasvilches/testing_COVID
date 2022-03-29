@@ -107,7 +107,7 @@ end
 
 
 
-function run_param_scen_cal(b::Float64,province::String="ontario",h_i::Int64 = 0,ic1::Int64=1,strains::Int64 = 1,index::Int64 = 0,scen::Int64 = 0,tra::Int64 = 0,eb::Int64 = 0,wpt::Int64 = 100,dayst::Vector{Int64} = [1;4],trans_omicron::Float64 = 1.0,immu_omicron::Float64 = 0.0,rc=[1.0],dc=[1],mt::Int64=300,vac::Bool=true,nsims::Int64=500)
+function run_param_scen_cal(b::Float64,province::String="ontario",h_i::Int64 = 0,ic1::Int64=1,strains::Int64 = 1,index::Int64 = 0,scen::Int64 = 0,tra::Int64 = 0,eb::Int64 = 0,wpt::Int64 = 100,dayst::Vector{Int64} = [1;4],trans_omicron::Float64 = 1.0,immu_omicron::Float64 = 0.0,mt::Int64=300,test_time::Int64 = 1,rc=[1.0],dc=[1],vac::Bool=true,nsims::Int64=500)
     
     
     @everywhere ip = cv.ModelParameters(β=$b,fsevere = 1.0,fmild = 1.0,vaccinating = $vac,
@@ -125,7 +125,8 @@ function run_param_scen_cal(b::Float64,province::String="ontario",h_i::Int64 = 0
     testing_days = $dayst,
     strain = $strains,
     immunity_omicron = $immu_omicron,
-    transmissibility_omicron = $trans_omicron)
+    transmissibility_omicron = $trans_omicron,
+    start_testing = $test_time)
 
     folder = create_folder(ip,province)
 

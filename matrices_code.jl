@@ -2370,15 +2370,15 @@ function distribute_vaccine(M1,M2,B)
 
     end
 
-    ## Let's boost a XX% of the population on day 0, following the order of the
+    ## Let's boost a XX% of the working-age population on day 0, following the order of the
     # earlier vaccinated to the later
 
     ## Let's find the number of boosted people
-    pos = findall(y-> y.n_boosted == 1,humans)
+    pos = findall(y-> y.n_boosted == 1 && y.age in 18:65,humans)
     NN = Int(round(length(pos)*(p.extra_booster/100))) # This is the number of extra booster we want to give
 
     ##Let's find everybody who can be boosted
-    pos = findall(y-> y.vac_status == 2 && y.n_boosted == 0 && y.age >= p.min_age_booster,humans)
+    pos = findall(y-> y.vac_status == 2 && y.age in 18:65 && y.n_boosted == 0,humans)
 
     days = [x.days_vac for x in humans[pos]]
     pos_days = sortperm(days,rev=true)
@@ -2527,9 +2527,12 @@ function _get_prob_test(x::Human,test::Int64)
                     0.004878778883	0.0005929083608	0.002234819322	0.0005541561804
                 ]
     ] #end M
+    #
+    #
+    #1 - RT-PCR, 2 - Abbott_PanBio 3 - BTNX_Rapid_Response	4 - Artron
     if x.daysinf+1 > size(M[1],1)
         d = 1
-        pp = [0.05 0.05 0.05 0.05]
+        pp = [0.005 0.015 0.015 0.015]
         prob = pp[1,test]
     else
         #Let's create a Tuple with one matrix for each strain

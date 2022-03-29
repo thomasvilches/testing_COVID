@@ -177,6 +177,7 @@ end
     scenariotest::Int64 = 0
     size_threshold::Int64 = 100
     extra_booster::Int64 = 0
+    start_testing::Int64 = 1
     prop_working::Float64 = 0.65 #https://www.ontario.ca/document/ontario-employment-reports/april-june-2021#:~:text=Ontario's%20overall%20labour%20force%20participation,years%20and%20over%20at%2038.8%25.
 end
 
@@ -301,24 +302,27 @@ function main(ip::ModelParameters,sim::Int64)
    
     
     # start the time loop
-    for st = 1:p.modeltime
-        #= 
-        if length(p.time_change_contact) >= count_change && p.time_change_contact[count_change] == st ###change contact pattern throughout the time
-            setfield!(p, :contact_change_rate, p.change_rate_values[count_change])
-            count_change += 1
-        end
-        =#
-        nra[st],npcr[st] = testing(testing_group,initial_dw)
+    for st = 1:(p.start_testing-1)
         _get_model_state(st, hmatrix) ## this datacollection needs to be at the start of the for loop
         dyntrans(st, grps,workplaces,initial_dw,sim)
-       
         sw = time_update() ###update the system
-
         initial_dw += 1
         if initial_dw > 7
             initial_dw = 1
         end
-
+        # end of day
+    end
+    
+    # start the time loop
+    for st = p.start_testing:p.modeltime
+        nra[st],npcr[st] = testing(testing_group,initial_dw)
+        _get_model_state(st, hmatrix) ## this datacollection needs to be at the start of the for loop
+        dyntrans(st, grps,workplaces,initial_dw,sim)
+        sw = time_update() ###update the system
+        initial_dw += 1
+        if initial_dw > 7
+            initial_dw = 1
+        end
         # end of day
     end
     
@@ -1749,11 +1753,11 @@ function contact_matrix()
     # regular contacts, just with 5 age groups. 
     #  0-4, 5-19, 20-49, 50-64, 65+
     CM = Array{Array{Float64, 1}, 1}(undef, 5)
-    CM[1] = [0.33,0.15,0.37,0.12,0.04]
-    CM[2] = [0.04,0.49,0.35,0.08,0.04]
-    CM[3] = [0.04,0.16,0.56,0.16,0.07]
-    CM[4] = [0.04,0.11,0.43,0.26,0.16]
-    CM[5] = [0.02,0.06,0.27,0.22,0.44] 
+    CM[1] = [0.25,0.132,0.44,0.144,0.034]
+    CM[2] = [0.0264,0.43,0.404,0.108,0.0316]
+    CM[3] = [0.03,0.13,0.602,0.179,0.059]
+    CM[4] = [0.026,0.086,0.456,0.3,0.132]
+    CM[5] = [0.012,0.052,0.303,0.266,0.367]  
    
     return CM
 end
@@ -1765,8 +1769,8 @@ end
 function negative_binomials(ag,mult) 
     ## the means/sd here are calculated using _calc_avgag
     # [0:4, 5:19, 20:49, 50:64, 65:99]
-    means = [5.33;8.29;11.73;9.23;3.69]
-    sd = [3.99;5.79;8.94;7.86;3.21]
+    means = [6.97;9.54;10.96;8.05;4.41]
+    sd = [5.22;6.66;8.35;6.86;3.83]
     means = means*mult
     totalbraks = length(means)
     nbinoms = Vector{NegativeBinomial{Float64}}(undef, totalbraks)
@@ -1786,8 +1790,9 @@ export negative_binomials
 
 function negative_binomials_shelter(ag,mult) 
     ## the means/sd here are calculated using _calc_avgag
-    means = [2.86, 4.7, 3.86, 3.15, 2.24]
-    sd = [2.14, 3.28, 2.94, 2.66, 1.95]
+    #72% reduction
+    means = [1.95; 2.67 3.07; 2.255 1.234]
+    sd = [1.461518,1.863781,2.337172,1.920688,1.073550]
     means = means*mult
     #sd = sd*mult
     totalbraks = length(means)
