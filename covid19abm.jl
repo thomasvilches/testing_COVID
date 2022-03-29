@@ -207,7 +207,7 @@ export ModelParameters, HEALTH, Human, humans, BETAS
 
 function runsim(simnum, ip::ModelParameters)
     # function runs the `main` function, and collects the data as dataframes. 
-    hmatrix, hh1, nra, npcr = main(ip,simnum)            
+    hmatrix, hh1, nra, npcr, niso = main(ip,simnum)            
 
     #Get the R0
     
@@ -252,7 +252,7 @@ function runsim(simnum, ip::ModelParameters)
     end
 
     return (a=all1, g1=ag1, g2=ag2, g3=ag3, g4=ag4, g5=ag5,g6=ag6,g7=ag7, work = work,
-    vector_dead=vector_ded,nra=nra,npcr=npcr, R0 = R01)
+    vector_dead=vector_ded,nra=nra,npcr=npcr, R0 = R01, niso=niso)
 end
 export runsim
 
@@ -293,6 +293,7 @@ function main(ip::ModelParameters,sim::Int64)
 
     nra::Vector{Int64} = zeros(Int64,p.modeltime)
     npcr::Vector{Int64} = zeros(Int64,p.modeltime)
+    niso::Vector{Int64} = zeros(Int64,p.modeltime)
 
     testing_group::Vector{Int64} = select_testing_group(workplaces)
   
@@ -303,6 +304,7 @@ function main(ip::ModelParameters,sim::Int64)
     
     # start the time loop
     for st = 1:(p.start_testing-1)
+        niso[st] = length(findall(x-> x.iso && x.workplace_idx> 0 && !(x.health_status in (HOS,ICU,DED))))
         _get_model_state(st, hmatrix) ## this datacollection needs to be at the start of the for loop
         dyntrans(st, grps,workplaces,initial_dw,sim)
         sw = time_update() ###update the system
@@ -315,6 +317,7 @@ function main(ip::ModelParameters,sim::Int64)
     
     # start the time loop
     for st = p.start_testing:p.modeltime
+        niso[st] = length(findall(x-> x.iso && x.workplace_idx> 0 && !(x.health_status in (HOS,ICU,DED))))
         nra[st],npcr[st] = testing(testing_group,initial_dw)
         _get_model_state(st, hmatrix) ## this datacollection needs to be at the start of the for loop
         dyntrans(st, grps,workplaces,initial_dw,sim)
@@ -327,7 +330,7 @@ function main(ip::ModelParameters,sim::Int64)
     end
     
     
-    return hmatrix, h_init1, nra, npcr## return the model state as well as the age groups. 
+    return hmatrix, h_init1, nra, npcr, niso## return the model state as well as the age groups. 
 end
 export main
 
