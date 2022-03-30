@@ -178,7 +178,8 @@ end
     size_threshold::Int64 = 100
     extra_booster::Int64 = 0
     start_testing::Int64 = 1
-    prop_working::Float64 = 0.65 #https://www.ontario.ca/document/ontario-employment-reports/april-june-2021#:~:text=Ontario's%20overall%20labour%20force%20participation,years%20and%20over%20at%2038.8%25.
+    days_pcr::Int64 = 1
+    #prop_working::Float64 = 0.65 #https://www.ontario.ca/document/ontario-employment-reports/april-june-2021#:~:text=Ontario's%20overall%20labour%20force%20participation,years%20and%20over%20at%2038.8%25.
 end
 
 Base.@kwdef mutable struct ct_data_collect
@@ -345,14 +346,18 @@ end
 
 ### I can change it to split basic, mid, and high
 function create_workplace() 
-    pos = findall(x-> x.age in 20:65,humans)
-    pos = sample(pos,Int(round(length(pos)*p.prop_working)),replace = false)
-    N = length(pos)
+    #https://www.ontario.ca/document/ontario-employment-reports/april-june-2021#:~:text=Ontario's%20overall%20labour%20force%20participation,years%20and%20over%20at%2038.8%25.
+    groups = [18:24,25:54,55:65]
+    unemp = [0.204;0.069;0.077]
+    pos = map(y->findall(x-> x.age in y,humans),groups)
+    pos1 = map(y->sample(pos[y],Int(round(length(pos[y])*(1-unemp[y]))),replace = false),1:length(pos))
+    pos2 = vcat(pos1...)
+    N = length(pos2)
     
     probs,breaks = work_size()
     vaux = map(y-> rand(breaks[rand(probs)]),1:Int(round(p.popsize/10.0)))
     vvaux = cumsum(vaux)
-    aux = findfirst(y-> y > N, vvaux)
+    aux = findfirst(y-> y >= N, vvaux)
 
     aux == nothing && error("increase the number of workplaces")
 
@@ -365,8 +370,8 @@ function create_workplace()
     samples::Vector{Vector{Int64}} = map(y-> [y],1:length(vaux))
 
     for i = 1:length(samples)
-        xx = sample(pos,vaux[i],replace=false)
-        pos = setdiff(pos,xx)
+        xx = sample(pos2,vaux[i],replace=false)
+        pos2 = setdiff(pos2,xx)
     
         for j in xx
             humans[j].workplace_idx = i
@@ -390,12 +395,12 @@ function select_testing_group(workplaces::Vector{Vector{Int64}})
         wpr = findall(x-> length(x) >= p.size_threshold,workplaces)
         grp = vcat(workplaces[wpr]...)
 
-        grp_iso = 1:length(humans)
+        grp_iso = findall(x-> x.age >= 5, humans)
     elseif p.scenariotest == 3
         grp = 1:length(humans)
         grp_iso = deepcopy(grp)
     elseif p.scenariotest == 4
-        grp = 1:length(humans)
+        grp = findall(x-> x.age >= 5, humans)
         grp_iso = deepcopy(grp)
     elseif p.scenariotest == 0
         grp = []
@@ -424,7 +429,7 @@ function testing(grp,dayweek)
             x.days_for_pcr -= 1
             if x.isovia == :symp
                 if !x.tookpcr#x.daysisolation == 0
-                    x.days_for_pcr = rand(1:2)
+                    x.days_for_pcr = p.days_pcr#rand(1:2)
                     npcr+=1
                     x.pcrprob = _get_prob_test(x,1)
                     x.tookpcr = true
@@ -444,7 +449,7 @@ function testing(grp,dayweek)
             x.days_for_pcr -= 1
             if x.isovia == :symp
                 if !x.tookpcr#x.daysisolation == 0
-                    x.days_for_pcr = rand(1:2)
+                    x.days_for_pcr = p.days_pcr#rand(1:2)
                     npcr+=1
                     x.pcrprob = _get_prob_test(x,1)
                     x.tookpcr = true
@@ -466,7 +471,7 @@ function testing(grp,dayweek)
                         _set_isolation(x,true,:test)
                         
                         x.tookpcr = true
-                        x.days_for_pcr = rand(1:2)
+                        x.days_for_pcr = p.days_pcr#rand(1:2)
                         npcr+=1
                         x.pcrprob = _get_prob_test(x,1)
                         
@@ -490,7 +495,7 @@ function testing(grp,dayweek)
             if x.isovia == :symp
                 
                 if !x.tookpcr#x.daysisolation == 0
-                    x.days_for_pcr = rand(1:2)
+                    x.days_for_pcr = p.days_pcr#rand(1:2)
                     npcr+=1
                     x.pcrprob = _get_prob_test(x,1)
                     x.tookpcr = true
