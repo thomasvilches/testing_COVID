@@ -1,9 +1,11 @@
 #for the paper
-#Calibrating to R0 = 1.0 without testing
+#Calibrating to R0 = 0.8-0.9 without testing
 dc = [1]
 rc = [1.0]
 #run_param_scen_cal(b,province,h_i,ic1,strains,index,scen,tra,eb,wpt,dayst,rc,dc,mt,vac,nsims)
-run_param_scen_cal(0.035,"ontario",10,1,6,2,0,0,0,100,[1],1.0,0.0,50)
+run_param_scen_cal(0.042,"ontario",10,1,3,2,0,0,0,100,[1],1.0,0.0,50)
+
+
 run_param_scen_cal(0.035,"ontario",10,1,6,1,0,0,0,100,[1],1.0,0.0,500)
 #0.35 for omicron generates a R0 of 0.84
 

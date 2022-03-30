@@ -2341,11 +2341,11 @@ function distribute_vaccine(M1,M2,B)
             x.boosted = true
             #### ADD here the new vaccine efficacy against Omicron for booster
                 
-            x.vac_eff_inf[6][2][end] = [0.76;0.677][x.vaccine_n]
-            x.vac_eff_symp[6][2][end] = 0.82
-            x.vac_eff_sev[6][2][end] = 0.90
+            x.vac_eff_inf[3][2][end] = [0.76;0.677][x.vaccine_n]
+            x.vac_eff_symp[3][2][end] = 0.82
+            x.vac_eff_sev[3][2][end] = 0.90
             #moderna has a different value against Delta for booster
-            x.vac_eff_inf[4][2][end] = [x.vac_eff_inf[4][2][end]; 0.94][x.vaccine_n]
+            x.vac_eff_inf[2][2][end] = [x.vac_eff_inf[2][2][end]; 0.94][x.vaccine_n]
 
             if x.recovered
                 index = Int(floor(x.days_recovered/7))
@@ -2394,11 +2394,11 @@ function distribute_vaccine(M1,M2,B)
         x.boosted = true
         #### ADD here the new vaccine efficacy against Omicron for booster
             
-        x.vac_eff_inf[6][2][end] = [0.76;0.677][x.vaccine_n]
-        x.vac_eff_symp[6][2][end] = 0.82
-        x.vac_eff_sev[6][2][end] = 0.90
+        x.vac_eff_inf[3][2][end] = [0.76;0.677][x.vaccine_n]
+        x.vac_eff_symp[3][2][end] = 0.82
+        x.vac_eff_sev[3][2][end] = 0.90
         #moderna has a different value against Delta for booster
-        x.vac_eff_inf[4][2][end] = [x.vac_eff_inf[4][2][end]; 0.94][x.vaccine_n]
+        x.vac_eff_inf[2][2][end] = [x.vac_eff_inf[2][2][end]; 0.94][x.vaccine_n]
 
         if x.recovered
             index = Int(floor(x.days_recovered/7))

@@ -316,7 +316,7 @@ function main(ip::ModelParameters,sim::Int64)
     
     # start the time loop
     for st = p.start_testing:p.modeltime
-        niso[st] = length(findall(x-> x.iso && x.workplace_idx> 0 && !(x.health_status in (HOS,ICU,DED))))
+        niso[st] = length(findall(x-> x.iso && x.workplace_idx> 0 && !(x.health_status in (HOS,ICU,DED)),humans))
         nra[st],npcr[st] = testing(testing_group,initial_dw)
         _get_model_state(st, hmatrix) ## this datacollection needs to be at the start of the for loop
         dyntrans(st, grps,workplaces,initial_dw,sim)
@@ -904,11 +904,7 @@ function time_update()
         x.days_recovered += 1 # We don't care about this up to the recovery
         x.days_after_detection += 1 #we don't care about this untill the individual is detected
         x.daysisolation += 1
-        if x.iso && x.daysisolation >= p.isolation_days && !(x.health_status in (HOS,ICU,DED))
-            _set_isolation(x,false,:null)
-            #x.positive = false
-            x.tookpcr = false
-        end
+        
         if x.tis >= x.exp             
             @match Symbol(x.swap_status) begin
                 :LAT  => begin 
@@ -942,6 +938,12 @@ function time_update()
                 :DED  => begin move_to_dead(x); ded_v[x.strain] += 1; end
                 _    => begin dump(x); error("swap expired, but no swap set."); end
             end
+        end
+        #if the individual recovers, we need to set they free. This loop must be here
+        if x.iso && x.daysisolation >= p.isolation_days && !(x.health_status in (HOS,ICU,DED))
+            _set_isolation(x,false,:null)
+            #x.positive = false
+            x.tookpcr = false
         end
         # run covid-19 functions for other integrated dynamics. 
         #ct_dynamics(x)
@@ -1567,7 +1569,7 @@ export _get_betavalue
         #cnt = rand() < 0.5 ? 0 : rand(1:3)
         aux = x.relaxed ? 1.0*(p.contact_change_rate^p.turnon) : p.contact_change_rate*p.contact_change_2
         cnt = rand(negative_binomials(ag,aux)) ##using the contact average for shelter-in
-    else 
+    elseif !(x.health_status  in (HOS,ICU,DED))
         cnt = rand(negative_binomials_shelter(ag,p.contact_change_2))  # expensive operation, try to optimize
     end
     
@@ -1753,8 +1755,8 @@ export negative_binomials
 function negative_binomials_shelter(ag,mult) 
     ## the means/sd here are calculated using _calc_avgag
     #72% reduction
-    means = [1.95; 2.67 3.07; 2.255 1.234]
-    sd = [1.461518,1.863781,2.337172,1.920688,1.073550]
+    means = [1.95; 2.67;3.07; 2.255;1.234]
+    sd = [1.461518;1.863781;2.337172;1.920688;1.12]
     means = means*mult
     #sd = sd*mult
     totalbraks = length(means)
