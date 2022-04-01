@@ -297,6 +297,7 @@ function main(ip::ModelParameters,sim::Int64)
     niso_f_w::Vector{Int64} = zeros(Int64,p.modeltime)
     niso_t_p::Vector{Int64} = zeros(Int64,p.modeltime)
     niso_f_p::Vector{Int64} = zeros(Int64,p.modeltime)
+    nleft::Vector{Int64} = zeros(Int64,p.modeltime)
 
     testing_group::Vector{Int64} = select_testing_group(workplaces)
   
@@ -574,7 +575,7 @@ function testing(grp,dayweek)
             end
         end
     elseif p.scenariotest == 5
-        for x in grp
+        for x in humans[grp]
             x.days_for_pcr -= 1
             if x.isovia == :symp && !x.positive
                 pp = _get_prob_test(x,p.test_ra)
@@ -594,23 +595,9 @@ function testing(grp,dayweek)
                         x.positive = true
                         _set_isolation(x,true,:test)
                         
-                        x.tookpcr = true
-                        x.days_for_pcr = p.days_pcr#rand(1:2)
-                        npcr+=1
-                        x.pcrprob = _get_prob_test(x,1)
-                        
                     end
                     x.nra += 1
                     nra += 1
-                elseif x.days_for_pcr == 0
-                    if rand() > x.pcrprob
-                        x.daysisolation = 999
-                        x.tookpcr = false
-                        x.days_after_detection = 999
-                        nleft += Int(x.daysinf < 999)
-                    else
-                        x.positive = true
-                    end
                 end
             end
         end
