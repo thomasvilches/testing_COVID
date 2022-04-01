@@ -208,7 +208,7 @@ export ModelParameters, HEALTH, Human, humans, BETAS
 
 function runsim(simnum, ip::ModelParameters)
     # function runs the `main` function, and collects the data as dataframes. 
-    hmatrix, hh1, nra, npcr, niso = main(ip,simnum)            
+    hmatrix, hh1, nra, npcr, niso_t_p, niso_t_w,niso_f_p,niso_f_w, nleft = main(ip,simnum)            
 
     #Get the R0
     
@@ -253,7 +253,8 @@ function runsim(simnum, ip::ModelParameters)
     end
 
     return (a=all1, g1=ag1, g2=ag2, g3=ag3, g4=ag4, g5=ag5,g6=ag6,g7=ag7, work = work,
-    vector_dead=vector_ded,nra=nra,npcr=npcr, R0 = R01, niso=niso)
+    vector_dead=vector_ded,nra=nra,npcr=npcr, R0 = R01, niso_t_p=niso_t_p, niso_t_w=niso_t_w,
+    niso_f_p=niso_f_p,niso_f_w=niso_f_w, nleft=nleft)
 end
 export runsim
 
@@ -292,7 +293,10 @@ function main(ip::ModelParameters,sim::Int64)
 
     nra::Vector{Int64} = zeros(Int64,p.modeltime)
     npcr::Vector{Int64} = zeros(Int64,p.modeltime)
-    niso::Vector{Int64} = zeros(Int64,p.modeltime)
+    niso_t_w::Vector{Int64} = zeros(Int64,p.modeltime)
+    niso_f_w::Vector{Int64} = zeros(Int64,p.modeltime)
+    niso_t_p::Vector{Int64} = zeros(Int64,p.modeltime)
+    niso_f_p::Vector{Int64} = zeros(Int64,p.modeltime)
 
     testing_group::Vector{Int64} = select_testing_group(workplaces)
   
@@ -303,7 +307,21 @@ function main(ip::ModelParameters,sim::Int64)
     
     # start the time loop
     for st = 1:(p.start_testing-1)
-        niso[st] = length(findall(x-> x.iso && x.workplace_idx> 0 && !(x.health_status in (HOS,ICU,DED))))
+        for x in humans
+            if x.iso && !(x.health_status in (HOS,ICU,DED))
+               if x.health_status in (SUS,REC)
+                    niso_f_p[st] += 1
+                    if x.workplace_idx > 0
+                        niso_f_w[st] += 1
+                    end
+               else
+                    niso_t_p[st] += 1
+                    if x.workplace_idx > 0
+                        niso_t_w[st] += 1
+                    end
+               end
+            end
+        end
         _get_model_state(st, hmatrix) ## this datacollection needs to be at the start of the for loop
         dyntrans(st, grps,workplaces,initial_dw,sim)
         sw = time_update() ###update the system
@@ -316,8 +334,24 @@ function main(ip::ModelParameters,sim::Int64)
     
     # start the time loop
     for st = p.start_testing:p.modeltime
-        niso[st] = length(findall(x-> x.iso && x.workplace_idx> 0 && !(x.health_status in (HOS,ICU,DED)),humans))
-        nra[st],npcr[st] = testing(testing_group,initial_dw)
+
+        for x in humans
+            if x.iso && !(x.health_status in (HOS,ICU,DED))
+               if x.health_status in (SUS,REC)
+                    niso_f_p[st] += 1
+                    if x.workplace_idx > 0
+                        niso_f_w[st] += 1
+                    end
+               else
+                    niso_t_p[st] += 1
+                    if x.workplace_idx > 0
+                        niso_t_w[st] += 1
+                    end
+               end
+            end
+        end
+
+        nra[st],npcr[st],nleft[st] = testing(testing_group,initial_dw)
         _get_model_state(st, hmatrix) ## this datacollection needs to be at the start of the for loop
         dyntrans(st, grps,workplaces,initial_dw,sim)
         sw = time_update() ###update the system
@@ -329,7 +363,7 @@ function main(ip::ModelParameters,sim::Int64)
     end
     
     
-    return hmatrix, h_init1, nra, npcr, niso## return the model state as well as the age groups. 
+    return hmatrix, h_init1, nra, npcr, niso_t_p, niso_t_w,niso_f_p,niso_f_w, nleft## return the model state as well as the age groups. 
 end
 export main
 
@@ -402,6 +436,12 @@ function select_testing_group(workplaces::Vector{Vector{Int64}})
     elseif p.scenariotest == 4
         grp = findall(x-> x.age >= 5, humans)
         grp_iso = deepcopy(grp)
+    elseif p.scenariotest == 5
+        
+        wpr = findall(x-> length(x) >= p.size_threshold,workplaces)
+        grp = vcat(workplaces[wpr]...)
+
+        grp_iso = deepcopy(grp)
     elseif p.scenariotest == 0
         grp = []
         grp_iso = deepcopy(grp)
@@ -423,7 +463,7 @@ end
 function testing(grp,dayweek)
     npcr::Int64 = 0
     nra::Int64 = 0
-
+    nleft::Int64 = 0
     if p.scenariotest == 1
         for x in humans[grp]
             x.days_for_pcr -= 1
@@ -438,6 +478,7 @@ function testing(grp,dayweek)
                         x.daysisolation = 999
                         x.tookpcr = false
                         x.days_after_detection = 999
+                        nleft += 1
                     else 
                         x.positive = true
                     end
@@ -458,6 +499,7 @@ function testing(grp,dayweek)
                         x.daysisolation = 999
                         x.tookpcr = false
                         x.days_after_detection = 999
+                        nleft += 1
                     else 
                         x.positive = true
                     end
@@ -483,6 +525,7 @@ function testing(grp,dayweek)
                         x.daysisolation = 999
                         x.tookpcr = false
                         x.days_after_detection = 999
+                        nleft += Int(x.daysinf < 999)
                     else
                         x.positive = true
                     end
@@ -504,6 +547,7 @@ function testing(grp,dayweek)
                         x.daysisolation = 999
                         x.tookpcr = false
                         x.days_after_detection = 999
+                        nleft += 1
                     else
                         x.positive = true
                     end
@@ -514,8 +558,25 @@ function testing(grp,dayweek)
     elseif p.scenariotest == 4
         for x in humans
             x.days_for_pcr -= 1
-            if x.isovia == :symp
+            if x.isovia == :symp && !x.positive
                 
+                pp = _get_prob_test(x,p.test_ra)
+                nra+=1
+                if rand() > pp
+                    x.daysisolation = 999
+                    x.tookpcr = false
+                    x.days_after_detection = 999
+                    nleft += 1
+                else
+                    x.positive = true
+                end
+            
+            end
+        end
+    elseif p.scenariotest == 5
+        for x in grp
+            x.days_for_pcr -= 1
+            if x.isovia == :symp && !x.positive
                 pp = _get_prob_test(x,p.test_ra)
                 nra+=1
                 if rand() > pp
@@ -525,7 +586,32 @@ function testing(grp,dayweek)
                 else
                     x.positive = true
                 end
-            
+            else
+                if dayweek in p.testing_days && x.days_after_detection > p.days_ex_test
+                    pp = _get_prob_test(x,p.test_ra)
+                    if rand() < pp
+                        
+                        x.positive = true
+                        _set_isolation(x,true,:test)
+                        
+                        x.tookpcr = true
+                        x.days_for_pcr = p.days_pcr#rand(1:2)
+                        npcr+=1
+                        x.pcrprob = _get_prob_test(x,1)
+                        
+                    end
+                    x.nra += 1
+                    nra += 1
+                elseif x.days_for_pcr == 0
+                    if rand() > x.pcrprob
+                        x.daysisolation = 999
+                        x.tookpcr = false
+                        x.days_after_detection = 999
+                        nleft += Int(x.daysinf < 999)
+                    else
+                        x.positive = true
+                    end
+                end
             end
         end
     elseif p.scenariotest == 0
@@ -535,7 +621,7 @@ function testing(grp,dayweek)
     end
 
 
-    return nra,npcr
+    return nra,npcr,nleft
 end
 
 
@@ -942,7 +1028,7 @@ function time_update()
         #if the individual recovers, we need to set they free. This loop must be here
         if x.iso && x.daysisolation >= p.isolation_days && !(x.health_status in (HOS,ICU,DED))
             _set_isolation(x,false,:null)
-            #x.positive = false
+            x.positive = false
             x.tookpcr = false
         end
         # run covid-19 functions for other integrated dynamics. 
