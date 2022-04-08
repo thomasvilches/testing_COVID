@@ -9,8 +9,40 @@ Calibrate for R0 with no testing -> 1.0 -> LATENT
 
 add time of testing => starting some days after and set a duration.
 
-# Scenario 1
+
+## Scenario 0
 
 Baseline scenario:
 
-- Testing general population 5+ yo if severe.
+- Testing general population 5+ yo if severe with PCR.
+
+## Scenario 1
+
+- Testing general population 5+ yo if severe with PCR.
+
+- Testing with PRC 50% of the population if mild case.
+
+
+## Scenario 2
+
+- Testing general population 5+ yo if severe with PCR.
+
+- Testing with RA the population if mild case.
+
+
+## Scenario 3
+
+- Testing general population 5+ yo if severe with PCR.
+
+- Testing with RA the working population if mild case.
+
+- Asymptomatic testing of working population with RA.
+
+
+## Scenario 4
+
+- Testing general population 5+ yo if severe with PCR.
+
+- Testing with RA the working population if mild case.
+
+- Asymptomatic testing of working population with RA and follow up with PCR if positive.

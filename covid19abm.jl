@@ -364,7 +364,7 @@ function main(ip::ModelParameters,sim::Int64)
         _get_model_state(st, hmatrix) ## this datacollection needs to be at the start of the for loop
         dyntrans(st, grps,workplaces,initial_dw,sim)
         sw = time_update() ###update the system
-       
+        nra[st]+= sw[6]
         # end of day
     end
     
@@ -429,11 +429,7 @@ function select_testing_group(workplaces::Vector{Vector{Int64}})
         grp = findall(x-> x.age >= 5, humans)
         grp_iso_sev = deepcopy(grp)
         grp_iso_mild = []
-        #= 
-        wpr = findall(x-> length(x) >= p.size_threshold,workplaces)
-        grp = vcat(workplaces[wpr]...)
-
-        grp_iso = deepcopy(grp) =#
+        
     elseif p.scenariotest == 1
         grp = findall(x-> x.age >= 5, humans)
         grp_iso_sev = deepcopy(grp)
@@ -551,6 +547,7 @@ function testing(grp,dayweek)
                     if rand() < pp
                         x.positive = true
                         _set_isolation(x,true,:test)
+                        x.isofalse = x.daysinf < 999 ? false : true
                     end
                     x.nra += 1
                     nra += 1
@@ -569,31 +566,36 @@ function testing(grp,dayweek)
                
                 end
                 
-            elseif x.test && !x.iso
-                if dayweek in p.testing_days && x.days_after_detection > p.days_ex_test
-                    pp = _get_prob_test(x,p.test_ra)
-                    if rand() < pp
-                        x.positive = true
-                        _set_isolation(x,true,:test)
-                        
-                        x.tookpcr = true
-                        x.days_for_pcr = p.days_pcr#rand(1:2)
-                        npcr+=1
-                        x.pcrprob = _get_prob_test(x,1)
-                        
+            elseif x.test
+                if !x.iso
+                    if dayweek in p.testing_days && x.days_after_detection > p.days_ex_test
+                        pp = _get_prob_test(x,p.test_ra)
+                        if rand() < pp
+                            x.positive = true
+                            _set_isolation(x,true,:test)
+                            
+                            x.tookpcr = true
+                            x.days_for_pcr = p.days_pcr#rand(1:2)
+                            npcr+=1
+                            x.pcrprob = _get_prob_test(x,1)
+                            x.isofalse = x.daysinf < 999 ? false : true
+                        end
+                        x.nra += 1
+                        nra += 1
                     end
-                    x.nra += 1
-                    nra += 1
-                elseif x.days_for_pcr == 0
-                    if rand() > x.pcrprob
-                        x.daysisolation = 999
-                        x.tookpcr = false
-                        x.days_after_detection = 999
-                        nleft += Int(x.daysinf < 999)
-                    else
-                        x.positive = true
+                else
+                    if x.days_for_pcr == 0
+                        if rand() > x.pcrprob
+                            x.daysisolation = 999
+                            x.tookpcr = false
+                            x.days_after_detection = 999
+                            nleft += Int(x.daysinf < 999)
+                        else
+                            x.positive = true
+                        end
                     end
                 end
+                
             end
         end
     elseif p.scenariotest == 999
@@ -963,6 +965,7 @@ function time_update()
     vac_1::Int64 = 0
     vac_2::Int64 = 0
     vac_3::Int64 = 0
+    nra::Int64 = 0
     
     for x in humans 
         x.tis += 1 
@@ -997,7 +1000,7 @@ function time_update()
                 :PRE  => begin move_to_pre(x); pre_v[x.strain] += 1; end
                 :ASYMP => begin move_to_asymp(x); asymp_v[x.strain] += 1; end
                 :MILD => begin move_to_mild(x); mild_v[x.strain] += 1; end
-                :MISO => begin move_to_miso(x); miso_v[x.strain] += 1; end
+                :MISO => begin nra+=move_to_miso(x); miso_v[x.strain] += 1; end
                 :INF  => begin move_to_inf(x); inf_v[x.strain] +=1; end    
                 :IISO => begin move_to_iiso(x); infiso_v[x.strain] += 1; end
                 :HOS  => begin move_to_hospicu(x); hos_v[x.strain] += 1; end 
@@ -1036,7 +1039,7 @@ function time_update()
         (ded,ded2,ded3,ded4,ded5,ded6) = ded_v
     =#
     #return (lat, mild, miso, inf, infiso, hos, icu, rec, ded,lat2, mild2, miso2, inf2, infiso2, hos2, icu2, rec2, ded2,lat3, mild3, miso3, inf3, infiso3, hos3, icu3, rec3, ded3, lat4, mild4, miso4, inf4, infiso4, hos4, icu4, rec4, ded4, lat5, mild5, miso5, inf5, infiso5, hos5, icu5, rec5, ded5, lat6, mild6, miso6, inf6, infiso6, hos6, icu6, rec6, ded6)
-    return (unvac_r,unvac_nr,vac_1,vac_2,vac_3)
+    return (unvac_r,unvac_nr,vac_1,vac_2,vac_3,nra)
 end
 export time_update
 
@@ -1302,17 +1305,18 @@ function move_to_miso(x::Human)
     #x.swap = x.strain == 1 ? REC : REC2
     x.tis = 0 
     x.exp = x.dur[4] - p.τmild  ## since tau amount of days was already spent as infectious
-    
-    if x.isolate_mild 
+    nra = 0
+    if !x.iso && x.isolate_mild 
         if p.scenariotest >= 2
             if rand() < _get_prob_test(x,p.test_ra)
+                nra = 1
                  _set_isolation(x, true, :mild)
             end
         else
             _set_isolation(x, true, :mild)
         end
     end
-   
+    return nra
 end
 export move_to_miso
 
@@ -1403,7 +1407,7 @@ function move_to_inf(x::Human)
     
     x.tis = 0 
     if rand() < h     # going to hospital or ICU but will spend delta time transmissing the disease with full contacts 
-        x.isolate_sev && _set_isolation(x, true, :sev)
+        !x.iso && x.isolate_sev && _set_isolation(x, true, :sev)
         x.exp = time_to_hospital
         if rand() < c
             aux_v = [ICU;ICU2;ICU3]
@@ -1468,7 +1472,7 @@ function move_to_iiso(x::Human)
     
     x.tis = 0     ## reset time in state 
     x.exp = x.dur[4] - p.τinf  ## since 1 day was spent as infectious
-    x.isolate_sev && _set_isolation(x, true, :sev)
+    !x.iso && x.isolate_sev && _set_isolation(x, true, :sev)
     
 end 
 

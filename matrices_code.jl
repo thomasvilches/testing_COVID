@@ -2534,7 +2534,7 @@ function _get_prob_test(x::Human,test::Int64)
         d = 1
         pp = [0.005 0.015 0.015 0.015]
         prob = pp[1,test]
-        x.isofalse = true
+        
     else
         #Let's create a Tuple with one matrix for each strain
         d = x.daysinf+1 #first row is 0
