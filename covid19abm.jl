@@ -59,7 +59,9 @@ Base.@kwdef mutable struct Human
     nra::Int64 = 0
     pcrprob::Float64 = 0.0
     test::Bool = false
-    isolate::Bool = false
+    isolate_mild::Bool = false
+    isolate_sev::Bool = false
+    isofalse::Bool = false
     waning::Vector{Float64} = [1.0;1.0]
     proportion_contacts_workplace::Float64 = 0.0    
 end
@@ -171,7 +173,7 @@ end
     ##for testing
     initial_day_week::Int64 = 1 # 1- Monday ... 7- Sunday
     testing_days::Vector{Int64} = [1;4]
-    days_ex_test::Int64 = 90 ## 3 months without testing
+    days_ex_test::Int64 = 0 ## 3 months without testing
     isolation_days::Int64 = 5 #how many days of isolation after testing
     test_ra::Int64 = 0 #1 - PCR, 2 - Abbott_PanBio 3 - 	BTNX_Rapid_Response	4 - Artron
     scenariotest::Int64 = 0
@@ -289,7 +291,7 @@ function main(ip::ModelParameters,sim::Int64)
     workplaces = create_workplace()
     #schools = create_schools()
     
-    initial_dw::Int64 = p.initial_day_week
+    initial_dw::Int64 = 0
 
     nra::Vector{Int64} = zeros(Int64,p.modeltime)
     npcr::Vector{Int64} = zeros(Int64,p.modeltime)
@@ -301,49 +303,55 @@ function main(ip::ModelParameters,sim::Int64)
 
     testing_group::Vector{Int64} = select_testing_group(workplaces)
   
-    insert_infected(LAT, p.initialinf, 4, ip.strain)[1]
+    insert_infected(LAT, p.initialinf, 4, p.strain)[1]
     h_init1 = findall(x->x.health_status  in (LAT,MILD,INF,PRE,ASYMP),humans)
     ## save the preisolation isolation parameters
    
     
     # start the time loop
     for st = 1:(p.start_testing-1)
+        initial_dw = st+(p.initial_day_week-1)-7*Int(floor((st-1+(p.initial_day_week-1))/7))
         for x in humans
             if x.iso && !(x.health_status in (HOS,ICU,DED))
-               if x.health_status in (SUS,REC)
+                if x.isofalse
                     niso_f_p[st] += 1
                     if x.workplace_idx > 0
                         niso_f_w[st] += 1
                     end
-               else
+                else
                     niso_t_p[st] += 1
                     if x.workplace_idx > 0
                         niso_t_w[st] += 1
                     end
-               end
+                end
+                if x.isovia == :sev
+                    if !x.tookpcr#x.daysisolation == 0
+                        x.days_for_pcr = p.days_pcr#rand(1:2)
+                        npcr[st]+=1
+                        x.pcrprob = _get_prob_test(x,1)
+                        x.tookpcr = true
+                    end
+                end
             end
         end
         _get_model_state(st, hmatrix) ## this datacollection needs to be at the start of the for loop
         dyntrans(st, grps,workplaces,initial_dw,sim)
         sw = time_update() ###update the system
-        initial_dw += 1
-        if initial_dw > 7
-            initial_dw = 1
-        end
+        
         # end of day
     end
     
     # start the time loop
     for st = p.start_testing:p.modeltime
-
+        initial_dw = st+(p.initial_day_week-1)-7*Int(floor((st-1+(p.initial_day_week-1))/7))
         for x in humans
             if x.iso && !(x.health_status in (HOS,ICU,DED))
-               if x.health_status in (SUS,REC)
+                if x.isofalse
                     niso_f_p[st] += 1
                     if x.workplace_idx > 0
                         niso_f_w[st] += 1
                     end
-               else
+                else
                     niso_t_p[st] += 1
                     if x.workplace_idx > 0
                         niso_t_w[st] += 1
@@ -356,10 +364,7 @@ function main(ip::ModelParameters,sim::Int64)
         _get_model_state(st, hmatrix) ## this datacollection needs to be at the start of the for loop
         dyntrans(st, grps,workplaces,initial_dw,sim)
         sw = time_update() ###update the system
-        initial_dw += 1
-        if initial_dw > 7
-            initial_dw = 1
-        end
+       
         # end of day
     end
     
@@ -420,32 +425,37 @@ end
 
 function select_testing_group(workplaces::Vector{Vector{Int64}})
     ### we can change this function to implement different test strategies
-    if p.scenariotest == 1
-        
-        wpr = findall(x-> length(x) >= p.size_threshold,workplaces)
-        grp = vcat(workplaces[wpr]...)
-
-        grp_iso = deepcopy(grp)
-    elseif p.scenariotest == 2
-        wpr = findall(x-> length(x) >= p.size_threshold,workplaces)
-        grp = vcat(workplaces[wpr]...)
-
-        grp_iso = findall(x-> x.age >= 5, humans)
-    elseif p.scenariotest == 3
-        grp = 1:length(humans)
-        grp_iso = deepcopy(grp)
-    elseif p.scenariotest == 4
+    if p.scenariotest == 0
         grp = findall(x-> x.age >= 5, humans)
-        grp_iso = deepcopy(grp)
-    elseif p.scenariotest == 5
-        
+        grp_iso_sev = deepcopy(grp)
+        grp_iso_mild = []
+        #= 
         wpr = findall(x-> length(x) >= p.size_threshold,workplaces)
         grp = vcat(workplaces[wpr]...)
 
-        grp_iso = deepcopy(grp)
-    elseif p.scenariotest == 0
+        grp_iso = deepcopy(grp) =#
+    elseif p.scenariotest == 1
+        grp = findall(x-> x.age >= 5, humans)
+        grp_iso_sev = deepcopy(grp)
+        grp_iso_mild = sample(grp,Int(round(0.5*length(grp))),replace=false)
+    elseif p.scenariotest == 2
+        grp = findall(x-> x.age >= 5, humans)
+        grp_iso_sev = deepcopy(grp)
+        grp_iso_mild = deepcopy(grp)
+    elseif p.scenariotest == 3
+        wpr = findall(x-> length(x) >= p.size_threshold,workplaces)
+        grp = vcat(workplaces[wpr]...)
+        grp_iso_sev =  findall(x-> x.age >= 5, humans)
+        grp_iso_mild = deepcopy(grp)
+    elseif p.scenariotest == 4
+        wpr = findall(x-> length(x) >= p.size_threshold,workplaces)
+        grp = vcat(workplaces[wpr]...)
+        grp_iso_sev =  findall(x-> x.age >= 5, humans)
+        grp_iso_mild = deepcopy(grp)
+    elseif p.scenariotest == 999
         grp = []
-        grp_iso = deepcopy(grp)
+        grp_iso_sev = deepcopy(grp)
+        grp_iso_mild = deepcopy(grp)
     else
         error("error in testing group")
     end
@@ -454,8 +464,12 @@ function select_testing_group(workplaces::Vector{Vector{Int64}})
         humans[i].test = true
     end
 
-    for i in grp_iso
-        humans[i].isolate = true
+    for i in grp_iso_sev
+        humans[i].isolate_sev = true
+    end
+
+    for i in grp_iso_mild
+        humans[i].isolate_mild = true
     end
 
     return grp
@@ -465,10 +479,30 @@ function testing(grp,dayweek)
     npcr::Int64 = 0
     nra::Int64 = 0
     nleft::Int64 = 0
-    if p.scenariotest == 1
-        for x in humans[grp]
+    if p.scenariotest == 0
+        for x in humans
             x.days_for_pcr -= 1
-            if x.isovia == :symp
+            if x.isovia == :sev
+                if !x.tookpcr#x.daysisolation == 0
+                    x.days_for_pcr = p.days_pcr#rand(1:2)
+                    npcr+=1
+                    x.pcrprob = _get_prob_test(x,1)
+                    x.tookpcr = true
+                end
+            end
+        end
+    elseif p.scenariotest == 1
+        for x in humans
+            x.days_for_pcr -= 1
+            if x.isovia == :sev
+                if !x.tookpcr#x.daysisolation == 0
+                    x.days_for_pcr = p.days_pcr#rand(1:2)
+                    npcr+=1
+                    x.pcrprob = _get_prob_test(x,1)
+                    x.tookpcr = true
+                
+                end
+            elseif x.isovia == :mild
                 if !x.tookpcr#x.daysisolation == 0
                     x.days_for_pcr = p.days_pcr#rand(1:2)
                     npcr+=1
@@ -489,27 +523,56 @@ function testing(grp,dayweek)
     elseif p.scenariotest == 2
         for x in humans
             x.days_for_pcr -= 1
-            if x.isovia == :symp
+            if x.isovia == :sev
                 if !x.tookpcr#x.daysisolation == 0
                     x.days_for_pcr = p.days_pcr#rand(1:2)
                     npcr+=1
                     x.pcrprob = _get_prob_test(x,1)
                     x.tookpcr = true
-                elseif x.days_for_pcr == 0
-                    if rand() > x.pcrprob
-                        x.daysisolation = 999
-                        x.tookpcr = false
-                        x.days_after_detection = 999
-                        nleft += 1
-                    else 
-                        x.positive = true
-                    end
+                
                 end
-            elseif x.test
+            end
+        end
+    elseif p.scenariotest == 3
+        for x in humans
+            x.days_for_pcr -= 1
+            if x.isovia == :sev
+                if !x.tookpcr#x.daysisolation == 0
+                    x.days_for_pcr = p.days_pcr#rand(1:2)
+                    npcr+=1
+                    x.pcrprob = _get_prob_test(x,1)
+                    x.tookpcr = true
+                
+                end
+                
+            elseif x.test && !x.iso
                 if dayweek in p.testing_days && x.days_after_detection > p.days_ex_test
                     pp = _get_prob_test(x,p.test_ra)
                     if rand() < pp
-                        
+                        x.positive = true
+                        _set_isolation(x,true,:test)
+                    end
+                    x.nra += 1
+                    nra += 1
+                end
+            end
+        end
+    elseif p.scenariotest == 4
+        for x in humans
+            x.days_for_pcr -= 1
+            if x.isovia == :sev
+                if !x.tookpcr#x.daysisolation == 0
+                    x.days_for_pcr = p.days_pcr#rand(1:2)
+                    npcr+=1
+                    x.pcrprob = _get_prob_test(x,1)
+                    x.tookpcr = true
+               
+                end
+                
+            elseif x.test && !x.iso
+                if dayweek in p.testing_days && x.days_after_detection > p.days_ex_test
+                    pp = _get_prob_test(x,p.test_ra)
+                    if rand() < pp
                         x.positive = true
                         _set_isolation(x,true,:test)
                         
@@ -533,75 +596,7 @@ function testing(grp,dayweek)
                 end
             end
         end
-    elseif p.scenariotest == 3
-        for x in humans
-            x.days_for_pcr -= 1
-            if x.isovia == :symp
-                
-                if !x.tookpcr#x.daysisolation == 0
-                    x.days_for_pcr = p.days_pcr#rand(1:2)
-                    npcr+=1
-                    x.pcrprob = _get_prob_test(x,1)
-                    x.tookpcr = true
-                elseif x.days_for_pcr == 0
-                    if rand() > x.pcrprob
-                        x.daysisolation = 999
-                        x.tookpcr = false
-                        x.days_after_detection = 999
-                        nleft += 1
-                    else
-                        x.positive = true
-                    end
-                end
-            
-            end
-        end
-    elseif p.scenariotest == 4
-        for x in humans
-            x.days_for_pcr -= 1
-            if x.isovia == :symp && !x.positive
-                
-                pp = _get_prob_test(x,p.test_ra)
-                nra+=1
-                if rand() > pp
-                    x.daysisolation = 999
-                    x.tookpcr = false
-                    x.days_after_detection = 999
-                    nleft += 1
-                else
-                    x.positive = true
-                end
-            
-            end
-        end
-    elseif p.scenariotest == 5
-        for x in humans[grp]
-            x.days_for_pcr -= 1
-            if x.isovia == :symp && !x.positive
-                pp = _get_prob_test(x,p.test_ra)
-                nra+=1
-                if rand() > pp
-                    x.daysisolation = 999
-                    x.tookpcr = false
-                    x.days_after_detection = 999
-                else
-                    x.positive = true
-                end
-            else
-                if dayweek in p.testing_days && x.days_after_detection > p.days_ex_test
-                    pp = _get_prob_test(x,p.test_ra)
-                    if rand() < pp
-                        
-                        x.positive = true
-                        _set_isolation(x,true,:test)
-                        
-                    end
-                    x.nra += 1
-                    nra += 1
-                end
-            end
-        end
-    elseif p.scenariotest == 0
+    elseif p.scenariotest == 999
 
     else
         error("no scenario")
@@ -1017,6 +1012,7 @@ function time_update()
             _set_isolation(x,false,:null)
             x.positive = false
             x.tookpcr = false
+            x.isofalse = false
         end
         # run covid-19 functions for other integrated dynamics. 
         #ct_dynamics(x)
@@ -1307,7 +1303,15 @@ function move_to_miso(x::Human)
     x.tis = 0 
     x.exp = x.dur[4] - p.τmild  ## since tau amount of days was already spent as infectious
     
-    x.isolate && _set_isolation(x, true, :symp)
+    if x.isolate_mild 
+        if p.scenariotest >= 2
+            if rand() < _get_prob_test(x,p.test_ra)
+                 _set_isolation(x, true, :mild)
+            end
+        else
+            _set_isolation(x, true, :mild)
+        end
+    end
    
 end
 export move_to_miso
@@ -1399,7 +1403,7 @@ function move_to_inf(x::Human)
     
     x.tis = 0 
     if rand() < h     # going to hospital or ICU but will spend delta time transmissing the disease with full contacts 
-        x.isolate && _set_isolation(x, true, :symp)
+        x.isolate_sev && _set_isolation(x, true, :sev)
         x.exp = time_to_hospital
         if rand() < c
             aux_v = [ICU;ICU2;ICU3]
@@ -1464,7 +1468,7 @@ function move_to_iiso(x::Human)
     
     x.tis = 0     ## reset time in state 
     x.exp = x.dur[4] - p.τinf  ## since 1 day was spent as infectious
-    x.isolate && _set_isolation(x, true, :symp)
+    x.isolate_sev && _set_isolation(x, true, :sev)
     
 end 
 
