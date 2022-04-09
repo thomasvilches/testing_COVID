@@ -180,7 +180,9 @@ end
     size_threshold::Int64 = 100
     extra_booster::Int64 = 0
     start_testing::Int64 = 1
+    test_for::Int64 = 112
     days_pcr::Int64 = 1
+    testing::Bool = false
     #prop_working::Float64 = 0.65 #https://www.ontario.ca/document/ontario-employment-reports/april-june-2021#:~:text=Ontario's%20overall%20labour%20force%20participation,years%20and%20over%20at%2038.8%25.
 end
 
@@ -301,7 +303,7 @@ function main(ip::ModelParameters,sim::Int64)
     niso_f_p::Vector{Int64} = zeros(Int64,p.modeltime)
     nleft::Vector{Int64} = zeros(Int64,p.modeltime)
 
-    testing_group::Vector{Int64} = select_testing_group(workplaces)
+    testing_group::Vector{Int64} = select_testing_group(workplaces,sim)
   
     insert_infected(LAT, p.initialinf, 4, p.strain)[1]
     h_init1 = findall(x->x.health_status  in (LAT,MILD,INF,PRE,ASYMP),humans)
@@ -309,7 +311,7 @@ function main(ip::ModelParameters,sim::Int64)
    
     
     # start the time loop
-    for st = 1:(p.start_testing-1)
+    for st = 1:min((p.start_testing-1),p.modeltime)
         initial_dw = st+(p.initial_day_week-1)-7*Int(floor((st-1+(p.initial_day_week-1))/7))
         for x in humans
             if x.iso && !(x.health_status in (HOS,ICU,DED))
@@ -340,9 +342,9 @@ function main(ip::ModelParameters,sim::Int64)
         
         # end of day
     end
-    
+    setfield!(p,:testing,true)
     # start the time loop
-    for st = p.start_testing:p.modeltime
+    for st = p.start_testing:min((p.start_testing+p.test_for-1),p.modeltime)
         initial_dw = st+(p.initial_day_week-1)-7*Int(floor((st-1+(p.initial_day_week-1))/7))
         for x in humans
             if x.iso && !(x.health_status in (HOS,ICU,DED))
@@ -365,6 +367,40 @@ function main(ip::ModelParameters,sim::Int64)
         dyntrans(st, grps,workplaces,initial_dw,sim)
         sw = time_update() ###update the system
         nra[st]+= sw[6]
+        # end of day
+    end
+
+    setfield!(p,:testing,false)
+
+    for st = (p.start_testing+p.test_for):p.modeltime
+        initial_dw = st+(p.initial_day_week-1)-7*Int(floor((st-1+(p.initial_day_week-1))/7))
+        for x in humans
+            if x.iso && !(x.health_status in (HOS,ICU,DED))
+                if x.isofalse
+                    niso_f_p[st] += 1
+                    if x.workplace_idx > 0
+                        niso_f_w[st] += 1
+                    end
+                else
+                    niso_t_p[st] += 1
+                    if x.workplace_idx > 0
+                        niso_t_w[st] += 1
+                    end
+                end
+                if x.isovia == :sev
+                    if !x.tookpcr#x.daysisolation == 0
+                        x.days_for_pcr = p.days_pcr#rand(1:2)
+                        npcr[st]+=1
+                        x.pcrprob = _get_prob_test(x,1)
+                        x.tookpcr = true
+                    end
+                end
+            end
+        end
+        _get_model_state(st, hmatrix) ## this datacollection needs to be at the start of the for loop
+        dyntrans(st, grps,workplaces,initial_dw,sim)
+        sw = time_update() ###update the system
+        
         # end of day
     end
     
@@ -423,8 +459,9 @@ function create_workplace()
     return samples
 end 
 
-function select_testing_group(workplaces::Vector{Vector{Int64}})
+function select_testing_group(workplaces::Vector{Vector{Int64}},sim::Int64)
     ### we can change this function to implement different test strategies
+    rng = MersenneTwister(200*sim)
     if p.scenariotest == 0
         grp = findall(x-> x.age >= 5, humans)
         grp_iso_sev = deepcopy(grp)
@@ -433,7 +470,7 @@ function select_testing_group(workplaces::Vector{Vector{Int64}})
     elseif p.scenariotest == 1
         grp = findall(x-> x.age >= 5, humans)
         grp_iso_sev = deepcopy(grp)
-        grp_iso_mild = sample(grp,Int(round(0.5*length(grp))),replace=false)
+        grp_iso_mild = sample(rng,grp,Int(round(0.5*length(grp))),replace=false)
     elseif p.scenariotest == 2
         grp = findall(x-> x.age >= 5, humans)
         grp_iso_sev = deepcopy(grp)
@@ -1306,7 +1343,7 @@ function move_to_miso(x::Human)
     x.tis = 0 
     x.exp = x.dur[4] - p.τmild  ## since tau amount of days was already spent as infectious
     nra = 0
-    if !x.iso && x.isolate_mild 
+    if p.testing && !x.iso && x.isolate_mild 
         if p.scenariotest >= 2
             if rand() < _get_prob_test(x,p.test_ra)
                 nra = 1
