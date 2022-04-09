@@ -12,6 +12,7 @@ Base.@kwdef mutable struct Human
     wentTo::HEALTH = UNDEF
     sickby::Int64 = -1
     nextday_meetcnt::Int16 = 0 ## how many contacts for a single day
+    nextday_meetcnt_w::Int16 = 0
     age::Int16   = 0    # in years. don't really need this but left it incase needed later
     ag::Int16   = 0
     tis::Int16   = 0   # time in state 
@@ -308,7 +309,10 @@ function main(ip::ModelParameters,sim::Int64)
     insert_infected(LAT, p.initialinf, 4, p.strain)[1]
     h_init1 = findall(x->x.health_status  in (LAT,MILD,INF,PRE,ASYMP),humans)
     ## save the preisolation isolation parameters
-   
+    #we need the workplaces to get the next days counts
+    for x in humans
+        get_nextday_counts(x)
+    end
     
     # start the time loop
     for st = 1:min((p.start_testing-1),p.modeltime)
@@ -444,13 +448,19 @@ function create_workplace()
     
 
     samples::Vector{Vector{Int64}} = map(y-> [y],1:length(vaux))
-
+    agebrak_work = [18:24,25:29,30:34,35:39,40:44,45:49,50:54,55:59,60:65]
+    work_prop = [0.4910;0.5825;0.5378;0.4852;0.5039;0.5039;0.4930;0.4501;0.3183]
     for i = 1:length(samples)
         xx = sample(pos2,vaux[i],replace=false)
         pos2 = setdiff(pos2,xx)
     
         for j in xx
-            humans[j].workplace_idx = i
+            x = humans[j]
+            x.workplace_idx = i
+            aa = findfirst(y-> x.age in y,agebrak_work)
+            if aa != nothing
+                x.proportion_contacts_workplace = work_prop[aa]
+            end
         end
         samples[i] = deepcopy(xx)
     end
@@ -890,8 +900,7 @@ export comorbidity
 function initialize() 
     agedist = get_province_ag(p.prov)
     agebraksnew = [0:4,5:14,15:24,25:34,35:44,45:54,55:64,65:74,75:84,85:99]
-    agebrak_work = [20:24,25:29,30:34,35:39,40:44,45:49,50:54,55:59,60:65]
-    work_prop = [0.4910;0.5825;0.5378;0.4852;0.5039;0.5039;0.4930;0.4501;0.3183]
+    
     for i = 1:p.popsize 
         humans[i] = Human()              ## create an empty human       
         x = humans[i]
@@ -903,14 +912,10 @@ function initialize()
         g = findfirst(y->y>=x.age,a)
         x.ag_new = g
         x.exp = 999  ## susceptible people don't expire.
-        aa = findfirst(y-> x.age in y,agebrak_work)
-        if aa != nothing
-            x.proportion_contacts_workplace = work_prop[aa]
-        end
+        
         #x.dur = sample_epi_durations() # sample epi periods   
         x.comorbidity = comorbidity(x.age)
         # initialize the next day counts (this is important in initialization since dyntrans runs first)
-        get_nextday_counts(x)
         
     end
 end
@@ -1091,7 +1096,7 @@ export time_update
     # a person could be isolated in mild/severe phase through fmild, fsevere
     # --> if x.iso == true from CT and x.isovia == :ct, do not overwrite
     # --> if x.iso == true from PRE and x.isovia == :pi, do not overwrite
-    if x.isovia == :null
+    if x.isovia == :null || via == :sev
         x.iso = iso 
         x.isovia = via
         x.daysisolation = 0
@@ -1633,7 +1638,7 @@ function move_to_recovered(h::Human)
 end
 
 
-@inline function _get_betavalue(sys_time, xhealth) 
+@inline function _get_betavalue(xhealth) 
     #bf = p.β ## baseline PRE
     #length(BETAS) == 0 && return 0
     bf = p.β#BETAS[sys_time]
@@ -1684,23 +1689,29 @@ export _get_betavalue
     #if person is isolated, they can recieve only 3 maximum contacts
     
     if !x.iso 
-        #cnt = rand() < 0.5 ? 0 : rand(1:3)
         aux = x.relaxed ? 1.0*(p.contact_change_rate^p.turnon) : p.contact_change_rate*p.contact_change_2
         cnt = rand(negative_binomials(ag,aux)) ##using the contact average for shelter-in
+        x.nextday_meetcnt_w = Int(round(cnt*x.proportion_contacts_workplace))
+        x.nextday_meetcnt = cnt-x.nextday_meetcnt_w
     elseif !(x.health_status  in (HOS,ICU,DED))
         cnt = rand(negative_binomials_shelter(ag,p.contact_change_2))  # expensive operation, try to optimize
+        x.nextday_meetcnt_w = 0
+        x.nextday_meetcnt = cnt
+    else
+
     end
     
-    if x.health_status == DED
-        cnt = 0 
+    if x.health_status in (HOS,ICU,DED)
+        x.nextday_meetcnt_w = 0
+        x.nextday_meetcnt = 0
     end
-    x.nextday_meetcnt = cnt
+   
     return cnt
 end
 
 function dyntrans(sys_time, grps,workplaces,initial_dw,sim)
-    totalmet = 0 # count the total number of contacts (total for day, for all INF contacts)
-    totalinf = 0 # count number of new infected 
+    #totalmet = 0 # count the total number of contacts (total for day, for all INF contacts)
+    #totalinf = 0 # count number of new infected 
     ## find all the people infectious
     #rng = MersenneTwister(246*sys_time*sim)
     pos = shuffle(1:length(humans))
@@ -1710,127 +1721,121 @@ function dyntrans(sys_time, grps,workplaces,initial_dw,sim)
             
             xhealth = x.health
             cnts = x.nextday_meetcnt
-            cnts == 0 && continue # skip person if no contacts
-
-            #cnts = number of contacts on that day
-            if !x.iso
-
-                if x.workplace_idx > 0 
-                    #workplace contacts
-                    cnts_w = Int(round(cnts*(x.proportion_contacts_workplace)))
-                    #general population contact
-                    cnts = cnts-cnts_w 
-
-                    gpw = Int.(round.(cm[x.ag]*cnts)) # split the counts over age groups
-
-                    if initial_dw ∉ (6,7) ###if no isolated and working days
-                        gpw = [gpw;cnts_w]
+            cnts_w = x.nextday_meetcnt_w
+            cnts+cnts_w == 0 && continue # skip person if no contacts
+            #general population contact
+            gpw = Int.(round.(cm[x.ag]*cnts))
             
-                        grp_sample = [grps;[workplaces[x.workplace_idx]]]
-                    else
-                        gpw = Int.(round.(cm[x.ag]*cnts)) # split the counts over age groups
-                        grp_sample = grps
-                    end
-                    
-                else
-                    
-                    gpw = Int.(round.(cm[x.ag]*cnts)) # split the counts over age groups
-                    grp_sample = grps
-                    
-                end
+            #cnts = number of contacts on that day
+
+            if !x.iso && x.workplace_idx > 0 && initial_dw ∉ (6,7)
+                perform_contacts(x,gpw,grps,false,xhealth)
+                perform_contacts(x,[cnts_w],[workplaces[x.workplace_idx]],true,xhealth)
             else
-                #contacts general population => weekend
-                gpw = Int.(round.(cm[x.ag]*cnts)) # split the counts over age groups
-                grp_sample = grps 
+                perform_contacts(x,gpw,grps,false,xhealth)
             end
 
-
-            for (i, g) in enumerate(gpw) 
-                meet = rand(grp_sample[i], g)   # sample the people from each group
-                # go through each person
-                for j in meet 
-                    y = humans[j]
-                    ycnt = y.nextday_meetcnt    
-                    ycnt == 0 && continue
-
-                    y.nextday_meetcnt = y.nextday_meetcnt - 1 # remove a contact
-                    totalmet += 1
-                    
-                    
-                    #adj_beta = 0 # adjusted beta value by strain and vaccine efficacy
-                    aux = 0
-                    if y.health == SUS && y.swap == UNDEF
-                        if y.vac_status*y.protected > 0
-                            aux = y.vac_eff_inf[x.strain][y.vac_status][y.protected]*y.waning[1]
-                            
-                        else
-                            aux = 0.0
-                        end
-                        beta = _get_betavalue(sys_time, xhealth)
-                    elseif y.health_status == REC && y.swap == UNDEF
-                        index = Int(floor(y.days_recovered/7))
-                        aux_red = 0.0
-                    
-                        if y.recvac == 1
-
-                            if index > 0
-                                if index <= size(waning_factors_rec,1)
-                                    aux = waning_factors_rec[index,1]
-                                else
-                                    aux = waning_factors_rec[end,1]
-                                end
-                            else
-                                aux = 1.0
-                            end
-                            #aux = aux*(1-aux_red)
-                            aux = p.rec_eff_inf[x.strain]*aux
-                        elseif y.recvac == 2
-
-                            if y.vac_status*y.protected > 0
-                                aux_vac = y.vac_eff_inf[x.strain][end][end]*y.waning[1]
-                                aux = aux_vac*(1-aux_red)
-                            else
-                                
-                                if index > 0
-                                    if index <= size(waning_factors_rec,1)
-                                        aux = waning_factors_rec[index,1]
-                                    else
-                                        aux = waning_factors_rec[end,1]
-                                    end
-                                else
-                                    aux = 1.0
-                                end
-                                
-                                aux = p.rec_eff_inf[x.strain]*aux
-                            end
-                        end
-                        beta = _get_betavalue(sys_time, xhealth)
-                    else
-                        beta = 0.0
-                    end
-                    adj_beta = beta*(1-aux*(1-p.immunity_omicron))
-
-                    if rand() < adj_beta
-                        totalinf += 1
-                        y.exp = y.tis   ## force the move to latent in the next time step.
-                        y.sickfrom = xhealth ## stores the infector's status to the infectee's sickfrom
-                        y.sickby = y.sickby < 0 ? x.idx : y.sickby
-                        y.strain = x.strain       
-                        aux_v = [LAT;LAT2;LAT3]
-                        y.swap = aux_v[y.strain]
-                        y.swap_status = LAT
-                        y.daysinf = 0
-                        y.dur = sample_epi_durations(y)
-                        #y.swap = y.strain == 1 ? LAT : LAT2
-                    end  
-                end
-            end            
+                      
         end
     end
-    return totalmet, totalinf
+    #return totalmet, totalinf
 end
 export dyntrans
 
+function perform_contacts(x,gpw,grp_sample,work,xhealth)
+
+    for (i, g) in enumerate(gpw) 
+        meet = rand(grp_sample[i], g)   # sample the people from each group
+        # go through each person
+        for j in meet 
+            y = humans[j]
+
+            if work
+                ycnt = y.nextday_meetcnt_w    
+                ycnt == 0 && continue
+    
+                y.nextday_meetcnt_w = y.nextday_meetcnt_w - min(1,ycnt) # remove a contact
+                #totalmet += 1
+            else
+                ycnt = y.nextday_meetcnt  
+                
+                y.nextday_meetcnt = y.nextday_meetcnt - min(1,ycnt) # remove a contact
+                #totalmet += 1
+            end
+            
+            ycnt == 0 && continue
+            
+            
+            #adj_beta = 0 # adjusted beta value by strain and vaccine efficacy
+            aux = 0
+            if y.health == SUS && y.swap == UNDEF
+                if y.vac_status*y.protected > 0
+                    aux = y.vac_eff_inf[x.strain][y.vac_status][y.protected]*y.waning[1]
+                    
+                else
+                    aux = 0.0
+                end
+                beta = _get_betavalue(xhealth)
+            elseif y.health_status == REC && y.swap == UNDEF
+                index = Int(floor(y.days_recovered/7))
+                aux_red = 0.0
+            
+                if y.recvac == 1
+
+                    if index > 0
+                        if index <= size(waning_factors_rec,1)
+                            aux = waning_factors_rec[index,1]
+                        else
+                            aux = waning_factors_rec[end,1]
+                        end
+                    else
+                        aux = 1.0
+                    end
+                    #aux = aux*(1-aux_red)
+                    aux = p.rec_eff_inf[x.strain]*aux
+                elseif y.recvac == 2
+
+                    if y.vac_status*y.protected > 0
+                        aux_vac = y.vac_eff_inf[x.strain][end][end]*y.waning[1]
+                        aux = aux_vac*(1-aux_red)
+                    else
+                        
+                        if index > 0
+                            if index <= size(waning_factors_rec,1)
+                                aux = waning_factors_rec[index,1]
+                            else
+                                aux = waning_factors_rec[end,1]
+                            end
+                        else
+                            aux = 1.0
+                        end
+                        
+                        aux = p.rec_eff_inf[x.strain]*aux
+                    end
+                end
+                beta = _get_betavalue(xhealth)
+            else
+                beta = 0.0
+            end
+            adj_beta = beta*(1-aux*(1-p.immunity_omicron))
+
+            if rand() < adj_beta
+                
+                y.exp = y.tis   ## force the move to latent in the next time step.
+                y.sickfrom = xhealth ## stores the infector's status to the infectee's sickfrom
+                y.sickby = y.sickby < 0 ? x.idx : y.sickby
+                y.strain = x.strain       
+                aux_v = [LAT;LAT2;LAT3]
+                y.swap = aux_v[y.strain]
+                y.swap_status = LAT
+                y.daysinf = 0
+                y.dur = sample_epi_durations(y)
+                #y.swap = y.strain == 1 ? LAT : LAT2
+            end  
+        end
+    end  
+
+end
 function contact_matrix()
     # regular contacts, just with 5 age groups. 
     #  0-4, 5-19, 20-49, 50-64, 65+
