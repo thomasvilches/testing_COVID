@@ -1,15 +1,10 @@
 
-function days_vac_f(l::Int64)
 
-    v = [i for i in p.day_inital_vac:(p.day_inital_vac+(l-2))]
-    
-    return v
-end
 
 function vaccination_rate_1(sim::Int64)
     #must be written as the temporal series of vaccines per age group
     if p.prov == :ontario
-        #p.day_inital_vac = 104
+        
         v = [0 0 0 0 0 0 0 0 0
                 0 0 0 0 0 0 0 0 0
                 0 0 0 0 0 0 0 0 0

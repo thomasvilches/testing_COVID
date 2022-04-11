@@ -245,8 +245,65 @@ ggsave(
 
 # Figure ------------------------------------------------------------------
 
-breaks = c("1:4","5:9","10:19","20:49","50:99","100:199","200:499","500:1000"]
+
+# Functions ---------------------------------------------------------------
+theme_flip <-
+  theme(
+    axis.text.x = element_text(face = "plain", family = "Helvetica", size = 14,angle=45,hjust=1.0),
+    #axis.text.y = element_text(face = "bold", family = "Arial", size = 26),
+    axis.title.x = element_text(face = "bold", family = "Helvetica", size = 16),
+    axis.text.y = element_text(face = "plain", family = "Helvetica", size = 16),
+    #axis.text.y = element_text(face = "bold", family = "Arial", size = 26),
+    axis.title.y = element_text(face = "bold", family = "Helvetica", size = 16),
+    axis.ticks.y = element_line(color = "black", size = 1.0),
+    legend.position = "none", 
+    legend.text = element_text(family = "Helvetica", size = 18),
+    legend.title = element_text(face = "bold", size = 18)
+  )
+
+bb = c("1-4","5-9","10-19","20-49","50-99","100-199","200-499","500-1000")
+breaks = bb %>% factor() %>% factor(levels = bb)
+
 aux = c(0.5795052593106524,0.18068968828208243,0.11820672374061501,0.07722637956240554,0.025467236167207672,0.01122172113883589,0.00551251951334341,0.0021704722848576454)
 
+ages = c("0-4","5-14","15-24","25-34","35-44","45-54","55-64","65-74","75-84","85-99")
+ages = ages %>% factor() %>% factor(levels = ages)
+
+agep=c(0.04807822, 0.10498712, 0.12470340, 0.14498051, 0.13137129, 0.12679091, 0.13804896, 0.10292032, 0.05484776, 0.02327152)
 
 
+
+df1 = data.frame(breaks,aux)
+df2 = data.frame(ages,agep)
+
+
+ggplot()+
+  geom_col(data=df1,aes(x=breaks,y=aux),color = pal_col[1],fill=pal_col[1])+
+  scale_x_discrete(name="Size")+
+  scale_y_continuous(name="Probability",expand = c(0,0.025,0.0,0.05))+
+  theme_bw()+theme_flip
+
+ggsave(
+  paste0("workplace_size.pdf"),
+  device = "pdf",
+  width = 4,
+  height = 5,
+  dpi = 300
+)
+
+
+ggplot()+
+  geom_col(data=df2,aes(x=ages,y=agep),color = pal_col[4],fill=pal_col[4])+
+  scale_x_discrete(name="Age group")+
+  scale_y_continuous(name="Probability",expand = c(0,0.005,0.0,0.01))+
+  theme_bw()+theme_flip
+
+ggsave(
+  paste0("agegroup.pdf"),
+  device = "pdf",
+  width = 4,
+  height = 5,
+  dpi = 300
+)
+
+dev.new(width=4, height=5, unit="in")

@@ -86,8 +86,6 @@ end
     frelasymp::Float64 = 0.26 ## relative transmission of asymptomatic
     fctcapture::Float16 = 0.0 ## how many symptomatic people identified
     #vaccine_ef::Float16 = 0.0   ## change this to Float32 typemax(Float32) typemax(Float64)
-    vac_com_dec_max::Float16 = 0.0 # how much the comorbidity decreases the vac eff
-    vac_com_dec_min::Float16 = 0.0 # how much the comorbidity decreases the vac eff
     herd::Int8 = 0 #typemax(Int32) ~ millions
     file_index::Int16 = 0
     nstrains::Int16 = 3
@@ -148,21 +146,15 @@ end
     rec_eff_symp::Vector{Float64} = [1.0;0.92;0.56]
     rec_eff_sev::Vector{Float64} = [1.0;1.0;0.878]
     
-    time_change_contact::Array{Int64,1} = [1;map(y-> 95+y,0:3);map(y->134+y,0:9);map(y->166+y,0:13);map(y->199+y,0:35)]
-    change_rate_values::Array{Float64,1} = [1.0;map(y-> 1.0-0.01*y,1:4);map(y-> 0.96-(0.055/10)*y,1:10);map(y-> 0.90+(0.1/14)*y,1:14);map(y-> 1.0-(0.34/36)*y,1:36)]
+    time_change_contact::Array{Int64,1} = [1]
+    change_rate_values::Array{Float64,1} = [1.0]
     contact_change_rate::Float64 = 1.0 #the rate that receives the value of change_rate_values
     contact_change_2::Float64 = 1.0 ##baseline number that multiplies the contact rate
 
     relaxed::Bool = false
-    relaxing_time::Int64 = 215 ### relax measures for vaccinated
-    status_relax::Int16 = 2
-    relax_after::Int64 = 1
-
+    
     turnon::Int64 = 1
 
-    day_inital_vac::Int64 = 104 ###this must match to the matrices in matrice code
-    time_vac_kids::Int64 = 253
-    time_vac_kids2::Int64 = 428
     using_jj::Bool = false
 
     #one waning rate for each efficacy? For each strain? I can change this structure based on that
@@ -480,7 +472,7 @@ function select_testing_group(workplaces::Vector{Vector{Int64}},sim::Int64)
     elseif p.scenariotest == 1
         grp = findall(x-> x.age >= 5, humans)
         grp_iso_sev = deepcopy(grp)
-        grp_iso_mild = sample(rng,grp,Int(round(0.5*length(grp))),replace=false)
+        grp_iso_mild = deepcopy(grp)#sample(rng,grp,Int(round(0.5*length(grp))),replace=false)
     elseif p.scenariotest == 2
         grp = findall(x-> x.age >= 5, humans)
         grp_iso_sev = deepcopy(grp)
@@ -489,12 +481,12 @@ function select_testing_group(workplaces::Vector{Vector{Int64}},sim::Int64)
         wpr = findall(x-> length(x) >= p.size_threshold,workplaces)
         grp = vcat(workplaces[wpr]...)
         grp_iso_sev =  findall(x-> x.age >= 5, humans)
-        grp_iso_mild = deepcopy(grp)
+        grp_iso_mild = deepcopy(grp_iso_sev)
     elseif p.scenariotest == 4
         wpr = findall(x-> length(x) >= p.size_threshold,workplaces)
         grp = vcat(workplaces[wpr]...)
         grp_iso_sev =  findall(x-> x.age >= 5, humans)
-        grp_iso_mild = deepcopy(grp)
+        grp_iso_mild = deepcopy(grp_iso_sev)
     elseif p.scenariotest == 999
         grp = []
         grp_iso_sev = deepcopy(grp)
@@ -1350,11 +1342,11 @@ function move_to_miso(x::Human)
     nra = 0
     if p.testing && !x.iso && x.isolate_mild 
         if p.scenariotest >= 2
+            nra = 1
             if rand() < _get_prob_test(x,p.test_ra)
-                nra = 1
-                 _set_isolation(x, true, :mild)
+                _set_isolation(x, true, :mild)
             end
-        else
+        elseif rand() < 0.5
             _set_isolation(x, true, :mild)
         end
     end
