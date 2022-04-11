@@ -249,7 +249,7 @@ function runsim(simnum, ip::ModelParameters)
         vector_ded[(x.age+1)] += 1
     end
 
-    return (a=all1, g1=ag1, g2=ag2, g3=ag3, g4=ag4, g5=ag5,g6=ag6,g7=ag7, work = work,
+    return (a=all1, g1=ag1, g2=ag2, g3=ag3, g4=ag4, g5=ag5,g6=ag6,g7=ag7,g8=ag8,g9=ag9, work = work,
     vector_dead=vector_ded,nra=nra,npcr=npcr, R0 = R01, niso_t_p=niso_t_p, niso_t_w=niso_t_w,
     niso_f_p=niso_f_p,niso_f_w=niso_f_w, nleft=nleft)
 end
@@ -358,7 +358,7 @@ function main(ip::ModelParameters,sim::Int64)
             end
         end
 
-        nra[st],npcr[st],nleft[st] = testing(testing_group,initial_dw)
+        nra[st],npcr[st],nleft[st] = testing(initial_dw)
         _get_model_state(st, hmatrix) ## this datacollection needs to be at the start of the for loop
         dyntrans(st, grps,workplaces,initial_dw,sim)
         sw = time_update() ###update the system
@@ -510,7 +510,7 @@ function select_testing_group(workplaces::Vector{Vector{Int64}},sim::Int64)
     return grp
 end
 
-function testing(grp,dayweek)
+function testing(dayweek)
     npcr::Int64 = 0
     nra::Int64 = 0
     nleft::Int64 = 0
@@ -1033,10 +1033,8 @@ function time_update()
                 end
                 :PRE  => begin move_to_pre(x); pre_v[x.strain] += 1; end
                 :ASYMP => begin move_to_asymp(x); asymp_v[x.strain] += 1; end
-                :MILD => begin move_to_mild(x); mild_v[x.strain] += 1; end
-                :MISO => begin nra+=move_to_miso(x); miso_v[x.strain] += 1; end
+                :MILD => begin nra+=move_to_mild(x); mild_v[x.strain] += 1; end
                 :INF  => begin move_to_inf(x); inf_v[x.strain] +=1; end    
-                :IISO => begin move_to_iiso(x); infiso_v[x.strain] += 1; end
                 :HOS  => begin move_to_hospicu(x); hos_v[x.strain] += 1; end 
                 :ICU  => begin move_to_hospicu(x); icu_v[x.strain] += 1; end
                 :REC  => begin move_to_recovered(x); rec_v[x.strain] += 1; end
@@ -1311,48 +1309,25 @@ function move_to_mild(x::Human)
     # how many days as full contacts before self-isolation
     # NOTE: if need to count non-isolated mild people, this is overestimate as isolated people should really be in MISO all the time
     #   and not go through the mild compartment 
-    
-    if x.iso
-        aux_v = [MISO;MISO2;MISO3]
-        x.swap = aux_v[x.strain]
-        x.swap_status = MISO
-        #x.swap = x.strain == 1 ? MISO : MISO2  
-        x.exp = p.τmild
-        
-    elseif rand() < p.fmild
-        aux_v = [MISO;MISO2;MISO3]
-        x.swap = aux_v[x.strain]
-        x.swap_status = MISO
-        #x.swap = x.strain == 1 ? MISO : MISO2  
-        x.exp = p.τmild
-    end
-end
-export move_to_mild
-
-function move_to_miso(x::Human)
-    ## transfers human h to the mild isolated infection stage for γ days
-    x.health = x.swap
-    x.health_status = x.swap_status
-    aux_v = [REC;REC2;REC3]
-    x.swap = aux_v[x.strain]
-    x.swap_status = REC
-    #x.swap = x.strain == 1 ? REC : REC2
-    x.tis = 0 
-    x.exp = x.dur[4] - p.τmild  ## since tau amount of days was already spent as infectious
     nra = 0
-    if p.testing && !x.iso && x.isolate_mild 
-        if p.scenariotest >= 2
-            nra = 1
-            if rand() < _get_prob_test(x,p.test_ra)
+    if !x.iso && rand() < p.fmild
+        
+        #x.swap = x.strain == 1 ? MISO : MISO2  
+        if p.testing && !x.iso && x.isolate_mild 
+            if p.scenariotest >= 2
+                nra = 1
+                if rand() < _get_prob_test(x,p.test_ra)
+                    _set_isolation(x, true, :mild)
+                end
+            elseif rand() < 0.5
                 _set_isolation(x, true, :mild)
             end
-        elseif rand() < 0.5
-            _set_isolation(x, true, :mild)
         end
     end
     return nra
 end
-export move_to_miso
+export move_to_mild
+
 
 function move_to_infsimple(x::Human)
     ## transfers human h to the severe infection stage for γ days 
@@ -1440,8 +1415,10 @@ function move_to_inf(x::Human)
     x.swap = UNDEF
     
     x.tis = 0 
+    
+    !x.iso && x.isolate_sev && _set_isolation(x, true, :sev)
+
     if rand() < h     # going to hospital or ICU but will spend delta time transmissing the disease with full contacts 
-        !x.iso && x.isolate_sev && _set_isolation(x, true, :sev)
         x.exp = time_to_hospital
         if rand() < c
             aux_v = [ICU;ICU2;ICU3]
@@ -1457,58 +1434,23 @@ function move_to_inf(x::Human)
        
     else ## no hospital for this lucky (but severe) individual 
         aux = 0.0
-        
-        if x.iso || rand() < p.fsevere 
-            x.exp = p.τsevere  ## 1 day isolation for severe cases 
-            aux_v = [IISO;IISO2;IISO3]
+        if rand() < mh[gg]*aux
+            x.exp = x.dur[4] 
+            aux_v = [DED;DED2;DED3]
             x.swap = aux_v[x.strain]
-            x.swap_status = IISO
-           
-        else
-            if rand() < mh[gg]*aux
-                x.exp = x.dur[4] 
-                aux_v = [DED;DED2;DED3]
-                x.swap = aux_v[x.strain]
-                x.swap_status = DED
-            else 
-                x.exp = x.dur[4]  
-                aux_v = [REC;REC2;REC3]
-                x.swap = aux_v[x.strain]
-                x.swap_status = REC
-            end
-        end  
+            x.swap_status = DED
+        else 
+            x.exp = x.dur[4]  
+            aux_v = [REC;REC2;REC3]
+            x.swap = aux_v[x.strain]
+            x.swap_status = REC
+        end
+         
     end
     ## before returning, check if swap is set 
     x.swap == UNDEF && error("agent I -> ?")
 end
 
-function move_to_iiso(x::Human)
-    ## transfers human h to the sever isolated infection stage for γ days
-    x.health = x.swap
-    x.health_status = x.swap_status
-    groups = [0:34,35:54,55:69,70:84,85:100]
-    gg = findfirst(y-> x.age in y,groups)
-    
-    mh = [0.0002; 0.0015; 0.011; 0.0802; 0.381] # death rate for severe cases.
-    aux = 0.0
-
-    if rand() < mh[gg]*aux
-        x.exp = x.dur[4] 
-        aux_v = [DED;DED2;DED3]
-        x.swap = aux_v[x.strain]
-        x.swap_status = DED
-    else 
-        x.exp = x.dur[4]  
-        aux_v = [REC;REC2;REC3]
-        x.swap = aux_v[x.strain]
-        x.swap_status = REC
-    end
-    
-    x.tis = 0     ## reset time in state 
-    x.exp = x.dur[4] - p.τinf  ## since 1 day was spent as infectious
-    !x.iso && x.isolate_sev && _set_isolation(x, true, :sev)
-    
-end 
 
 function move_to_hospicu(x::Human)   
     #death prob taken from https://www.cdc.gov/nchs/nvss/vsrr/covid_weekly/index.htm#Comorbidities
