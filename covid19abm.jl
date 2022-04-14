@@ -77,9 +77,9 @@ end
     calibration2::Bool = false 
     start_several_inf::Bool = true
     modeltime::Int64 = 435
-    initialinf::Int64 = 20
+    initialinf::Int64 = 1
     τmild::Int64 = 0 ## days before they self-isolate for mild cases
-    fmild::Float64 = 1.0  ## percent of people practice self-isolation
+    fmild::Float64 = 0.5  ## percent of people practice self-isolation
     τinf::Int64 = 0
     τsevere::Int64 = τinf
     fsevere::Float64 = 1.0 #
@@ -94,7 +94,6 @@ end
     
     #the cap for coverage should be 90% for 65+; 95% for HCW; 80% for 50-64; 60% for 16-49; and then 50% for 12-15 (starting from June 1).
     #comor_comp::Float64 = 0.7 #prop comorbidade tomam
-    vaccinating::Bool = true #vaccinating?
     
     ##Alpha - B.1.1.7
     sec_strain_trans::Float64 = 1.5#1.5 #transmissibility of second strain
@@ -279,7 +278,7 @@ function main(ip::ModelParameters,sim::Int64)
 
 
     herd_immu_dist_4(sim,1)
-    distribute_vaccine(vac_rate_1,vac_rate_2,vac_rate_booster)
+    distribute_vaccine(vac_rate_1,vac_rate_2,vac_rate_booster,sim)
 
     # split population in agegroups 
     grps = get_ag_dist()
@@ -450,8 +449,8 @@ function create_workplace()
             x = humans[j]
             x.workplace_idx = i
             aa = findfirst(y-> x.age in y,agebrak_work)
-            if aa != nothing
-                x.proportion_contacts_workplace = work_prop[aa]
+            if aa != nothing && length(xx) > 1
+                x.proportion_contacts_workplace =  work_prop[aa]
             end
         end
         samples[i] = deepcopy(xx)
@@ -682,7 +681,7 @@ function vac_update(x::Human)
         x.days_vac += 1
 
     elseif x.vac_status == 2
-        if x.days_vac == p.days_to_protection[x.vaccine_n][x.vac_status][1]#0
+        if x.days_vac == p.days_to_protection[x.vaccine_n][x.vac_status][1] && !x.boosted#0
             x.protected = 1
             x.index_day = min(length(p.days_to_protection[x.vaccine_n][x.vac_status]),x.index_day+1)
 
@@ -1053,9 +1052,9 @@ function time_update()
         #ct_dynamics(x)
         # get the meet counts for the next day 
         get_nextday_counts(x)
-        if p.vaccinating
-            vac_update(x)
-        end
+        
+        vac_update(x)
+        
        
     end
 
@@ -1310,8 +1309,7 @@ function move_to_mild(x::Human)
     # NOTE: if need to count non-isolated mild people, this is overestimate as isolated people should really be in MISO all the time
     #   and not go through the mild compartment 
     nra = 0
-    if !x.iso && rand() < p.fmild
-        
+    if !x.iso
         #x.swap = x.strain == 1 ? MISO : MISO2  
         if p.testing && !x.iso && x.isolate_mild 
             if p.scenariotest >= 2
@@ -1319,7 +1317,7 @@ function move_to_mild(x::Human)
                 if rand() < _get_prob_test(x,p.test_ra)
                     _set_isolation(x, true, :mild)
                 end
-            elseif rand() < 0.5
+            elseif rand() < p.fmild
                 _set_isolation(x, true, :mild)
             end
         end
@@ -1416,7 +1414,7 @@ function move_to_inf(x::Human)
     
     x.tis = 0 
     
-    !x.iso && x.isolate_sev && _set_isolation(x, true, :sev)
+    x.isolate_sev && _set_isolation(x, true, :sev)
 
     if rand() < h     # going to hospital or ICU but will spend delta time transmissing the disease with full contacts 
         x.exp = time_to_hospital

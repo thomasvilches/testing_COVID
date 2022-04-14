@@ -107,10 +107,10 @@ end
 
 
 
-function run_param_scen_cal(b::Float64,province::String="ontario",h_i::Int64 = 0,ic1::Int64=1,strains::Int64 = 1,index::Int64 = 0,scen::Int64 = 0,tra::Int64 = 0,eb::Int64 = 0,wpt::Int64 = 100,dayst::Vector{Int64} = [1;4],trans_omicron::Float64 = 1.0,immu_omicron::Float64 = 0.0,mt::Int64=300,test_time::Int64 = 1,test_dur::Int64=112,rc=[1.0],dc=[1],vac::Bool=true,nsims::Int64=500)
+function run_param_scen_cal(b::Float64,province::String="ontario",h_i::Int64 = 0,ic1::Int64=1,strains::Int64 = 1,index::Int64 = 0,scen::Int64 = 0,tra::Int64 = 0,eb::Int64 = 0,wpt::Int64 = 100,dayst::Vector{Int64} = [1;4],trans_omicron::Float64 = 1.0,immu_omicron::Float64 = 0.0,mt::Int64=300,test_time::Int64 = 1,test_dur::Int64=112,rc=[1.0],dc=[1],nsims::Int64=500)
     
     
-    @everywhere ip = cv.ModelParameters(β=$b,fsevere = 1.0,fmild = 1.0,vaccinating = $vac,
+    @everywhere ip = cv.ModelParameters(β=$b,
     herd = $(h_i),start_several_inf=true,
     initialinf = $ic1,
     file_index = $index,

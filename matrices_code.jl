@@ -2208,7 +2208,7 @@ function vector_probs()
     return v
 end
 
-function distribute_vaccine(M1,M2,B)
+function distribute_vaccine(M1,M2,B,sim)
     braks = get_breaks_vac()
     v,fd,sd = temporal_proportion()
 
@@ -2379,10 +2379,11 @@ function distribute_vaccine(M1,M2,B)
     pos_days = sortperm(days,rev=true)
     ranpos = pos[pos_days]
 
+    rng = MersenneTwister(200*sim)
     NN = min(NN,length(ranpos)) ## making sure we are capping the boosters
     for i in ranpos[1:NN]
         x = humans[i]
-        x.days_vac = 0 ##rand the day
+        x.days_vac = rand(rng,0:max(0,(x.days_vac-p.booster_after[x.vaccine_n]))) ##rand the day
         x.protected = length(p.days_to_protection[x.vaccine_n][x.vac_status])
         x.index_day = min(length(p.days_to_protection[x.vaccine_n][x.vac_status]),x.protected+1)
         x.n_boosted += 1
