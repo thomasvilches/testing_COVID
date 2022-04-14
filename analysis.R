@@ -1,4 +1,4 @@
-setwd("~/PosDoc/Coronavirus/Cost_eff/")
+setwd("D:/PosDoc/Coronavirus/Testing/")
 library(readxl)
 library(dplyr)
 library(ggplot2)
@@ -7,10 +7,12 @@ library(lubridate)
 library(data.table)
 library(tidyverse)
 
+population = 14826276 #Ontario https://www150.statcan.gc.ca/t1/tbl1/en/tv.action?pid=1710000501 on March 24, 2022
+enddate = as.Date("2022-03-31")
 
 # Cases -------------------------------------------------------------------
-
-data = read.csv("data/covid19-download.csv")
+#https://www.canada.ca/en/public-health/services/diseases/2019-novel-coronavirus-infection.html#a1
+data = read.csv("covid19-download.csv")
 head(data)
 data = data[data$prname == "Ontario",]
 data$date = as.Date(data$date)
@@ -37,13 +39,13 @@ ggplot()+geom_col(data=data,aes(x=date,y=incdeaths),fill="grey")+
   theme_bw()
 
 
-aa = max(data$roll7cases[data$date <= as.Date("2021-03-01") & data$date >= as.Date("2020-11-01") & !is.na(data$roll7cases)])
+aa = max(data$roll7cases[data$date <= enddate & data$date >= as.Date("2020-11-01") & !is.na(data$roll7cases)])
 aa
 
 d1 = data$date[data$roll7cases == aa & !is.na(data$roll7cases) ]
 
 
-aa = max(data$roll7deaths[data$date <= as.Date("2021-03-01") & data$date >= as.Date("2020-11-01")  & !is.na(data$roll7deaths)])
+aa = max(data$roll7deaths[data$date <= as.Date("2021-04-01") & data$date >= as.Date("2020-11-01")  & !is.na(data$roll7deaths)])
 aa
 
 d2 = data$date[data$roll7deaths == aa & !is.na(data$roll7deaths) ]
@@ -155,7 +157,7 @@ population
 
 setwd("~/PosDoc/Coronavirus/Cost_eff/")
 
-data = read.csv("data/covid19-download.csv")
+data = read.csv("covid19-download.csv")
 data = data %>% filter(prname=="Ontario") %>% mutate(date = as.Date(date)) %>% select(date,numconf)
 
 head(data)
@@ -167,6 +169,8 @@ df = data %>%
   #group_by(Product) %>%
   fill(`numconf`)
 df$inccases = diff(c(0,df$numconf))
+df = df %>% filter(date <= enddate)
+
 
 ggplot()+geom_col(data=df,aes(x=date,y=inccases),fill="grey")+
   #geom_vline(aes(xintercept = d1), linetype = "dashed")+
@@ -176,7 +180,7 @@ ggplot()+geom_col(data=df,aes(x=date,y=inccases),fill="grey")+
 vector_aux = df$inccases/sum(df$inccases)
 va = rev(vector_aux)
 
-write.table(va,"data/vector_prob_ontario.dat",row.names= F,col.names = F)
+write.table(va,"vector_prob_ontario.dat",row.names= F,col.names = F)
 
 
 
@@ -186,10 +190,10 @@ library(ggplot2)
 library(reshape2)
 # https://health-infobase.canada.ca/covid-19/vaccination-coverage/
 
-data = read.csv("data/vaccination-coverage-byAgeAndSex-overTimeDownload.csv")
+data = read.csv("vaccination-coverage-byAgeAndSex-overTimeDownload.csv", encoding = "UTF-8")
 head(data)
 data %>% pull(prfname) %>% unique()
-data = data %>% filter(prfname == "Ontario") %>% rename(date = week_end) %>% mutate(date = ymd(date)) 
+data = data %>% filter(prfname == "Ontario") %>% rename(date = week_end) %>% mutate(date = ymd(date)) %>% filter(date <= enddate)
 
 data %>% pull(sex) %>% unique()
 data %>% pull(age) %>% unique()
@@ -216,7 +220,7 @@ head(df_f)
 
 
 aa = df_f %>%
-  complete(date = seq.Date(min(date), max(date), by="day")) %>%
+  complete(date = seq.Date(min(date), enddate, by="day")) %>%
   #group_by(Product) %>%
   fill(colnames(df_f)[-1])
 
@@ -234,7 +238,7 @@ sum(M2)/population
 M22 = round(abs(M2)/population*100000)
 M22
 
-write.table(M22,"data/dose2.dat",row.names = F,col.names = F)
+write.table(M22,"dose2.dat",row.names = F,col.names = F)
 
 ###dose 1
 
@@ -251,7 +255,7 @@ head(df_f)
 
 
 aa = df_f %>%
-  complete(date = seq.Date(min(date), max(date), by="day")) %>%
+  complete(date = seq.Date(min(date),enddate, by="day")) %>%
   #group_by(Product) %>%
   fill(colnames(df_f)[-1])
 
@@ -269,7 +273,7 @@ M1[M1<0] = 0
 M12 = round(abs(M1)/population*100000)
 sum(M12)/100000
 
-write.table(M12,"data/dose1.dat",row.names = F,col.names = F)
+write.table(M12,"dose1.dat",row.names = F,col.names = F)
 
 
 
@@ -279,29 +283,36 @@ write.table(M12,"data/dose1.dat",row.names = F,col.names = F)
 df_f = df %>% select(date,groups,booster)  %>% group_by(date) %>% summarise(booster = sum(booster))
 head(df_f)
 
-df_f = df %>% group_by(date) %>% summarise(booster = sum(booster))
+df_f = df %>% filter(date <= enddate) %>% group_by(date) %>% summarise(booster = sum(booster))
 
-plot(df_f$booster/population)
+
+ggplot(df_f)+geom_point(aes(x = date,y=booster/population))+scale_x_date(date_breaks = "1 week")+
+  theme(axis.text.x = element_text(angle = 45,hjust=1.0))
+
 head(df_f)
   
   
   
   aa = df_f %>%
-  complete(date = seq.Date(min(date), max(date), by="day")) %>%
+  complete(date = seq.Date(min(date), enddate, by="day")) %>%
   #group_by(Product) %>%
   fill(colnames(df_f)[-1])
   
-  B =diff(aa$booster) ###starting at 2020-12-20
-  B[B<0]
+aa$boosterd =diff(c(0,aa$booster)) ###starting at 2020-12-20
+B = aa$boosterd  
+B[B<0]
   
-  plot(B,type = "l")
+  
+  
+  ggplot(aa)+geom_col(aes(x = date,y=boosterd/population))+scale_x_date(date_breaks = "1 week")+
+    theme(axis.text.x = element_text(angle = 45,hjust=1.0))
   
   sum(B)/population
   
   B2 = round(B/population*100000)
   sum(B2)/100000
   
-  write.table(B2,"data/booster_dose.dat",row.names = F,col.names = F)
+  write.table(B2,"booster_dose.dat",row.names = F,col.names = F)
   
   
   ## vaccine type https://health-infobase.canada.ca/covid-19/vaccination-coverage/
