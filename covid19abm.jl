@@ -9,7 +9,6 @@ Base.@kwdef mutable struct Human
     swap::HEALTH = UNDEF
     swap_status::HEALTH = UNDEF
     sickfrom::HEALTH = UNDEF
-    wentTo::HEALTH = UNDEF
     sickby::Int64 = -1
     nextday_meetcnt::Int16 = 0 ## how many contacts for a single day
     nextday_meetcnt_w::Int16 = 0
@@ -26,26 +25,23 @@ Base.@kwdef mutable struct Human
 
     got_inf::Bool = false
     herd_im::Bool = false
-    hospicu::Int8 = -1
     ag_new::Int16 = -1
-    hcw::Bool = false
-    days_vac::Int64 = -1
-    first_one::Bool = false
+    days_vac::Int16 = -1
     strain::Int16 = -1
-    index_day::Int64 = 1
-    relaxed::Bool = false
+    index_day::Int16 = 1
+   
     recovered::Bool = false
     vaccine::Symbol = :none
     vaccine_n::Int16 = 0
-    protected::Int64 = 0
-    days_recovered::Int64 = -1
+    protected::Int16 = 0
+    days_recovered::Int32 = -1
     boosted::Bool = false
-    n_boosted::Int64 = 0
-    recvac::Int64 = 0 # 1 - rec , 2 - vac ... this field shows which immunity will be used for protection
+    n_boosted::Int8 = 0
+    recvac::Int8 = 0 # 1 - rec , 2 - vac ... this field shows which immunity will be used for protection
 
-    vac_eff_inf::Array{Array{Array{Float64,1},1},1} = [[[0.0]]]
-    vac_eff_symp::Array{Array{Array{Float64,1},1},1} = [[[0.0]]]
-    vac_eff_sev::Array{Array{Array{Float64,1},1},1} = [[[0.0]]]
+    vac_eff_inf::Array{Array{Array{Float32,1},1},1} = [[[0.0]]]
+    vac_eff_symp::Array{Array{Array{Float32,1},1},1} = [[[0.0]]]
+    vac_eff_sev::Array{Array{Array{Float32,1},1},1} = [[[0.0]]]
 
     workplace_idx::Int64 = -1
 
@@ -54,10 +50,10 @@ Base.@kwdef mutable struct Human
     daysisolation::Int64 = 999
     days_after_detection::Int64 = 999
     positive::Bool = false
-    days_for_pcr::Int64 = -1
+    days_for_pcr::Int32 = -1
     daysinf::Int64 = 999
     tookpcr::Bool = false
-    nra::Int64 = 0
+    nra::Int16 = 0
     pcrprob::Float64 = 0.0
     test::Bool = false
     isolate_mild::Bool = false
@@ -78,10 +74,7 @@ end
     start_several_inf::Bool = true
     modeltime::Int64 = 435
     initialinf::Int64 = 1
-    τmild::Int64 = 0 ## days before they self-isolate for mild cases
     fmild::Float64 = 0.5  ## percent of people practice self-isolation
-    τinf::Int64 = 0
-    τsevere::Int64 = τinf
     fsevere::Float64 = 1.0 #
     frelasymp::Float64 = 0.26 ## relative transmission of asymptomatic
     fctcapture::Float16 = 0.0 ## how many symptomatic people identified
@@ -126,15 +119,15 @@ end
     min_age_booster::Int64 = 16
     #=------------ Vaccine Efficacy ----------------------------=#
     days_to_protection::Array{Array{Array{Int64,1},1},1} = [[[14;21],[0;7]],[[14;21],[0;7]],[[14]]]
-    vac_efficacy_inf::Array{Array{Array{Array{Float64,1},1},1},1} = [[[[0.46;0.46],[0.46;0.861]],[[0.416;0.416],[0.416;0.85]],[[0.16;0.16],[0.16;0.33]]],#booster efficacy  for omicron changed in vac_time function
+    vac_efficacy_inf::Array{Array{Array{Array{Float32,1},1},1},1} = [[[[0.46;0.46],[0.46;0.861]],[[0.416;0.416],[0.416;0.85]],[[0.16;0.16],[0.16;0.33]]],#booster efficacy  for omicron changed in vac_time function
     [[[0.843;0.843],[0.843,0.964]],[[0.77;0.77],[0.77,0.867]],[[0.16;0.16],[0.16,0.428]]],
     [[[0.61]],[[0.56]],[[0.488]],[[0.496]],[[0.61]],[[0.488]]]]#### 50:5:80
 
-    vac_efficacy_symp::Array{Array{Array{Array{Float64,1},1},1},1} = [[[[0.63;0.65],[0.65;0.93]],[[0.57;0.59],[0.59;0.92]],[[0.616;0.616],[0.616;0.69]]], #booster efficacy  for omicronmchanged in vac_time function
+    vac_efficacy_symp::Array{Array{Array{Array{Float32,1},1},1},1} = [[[[0.63;0.65],[0.65;0.93]],[[0.57;0.59],[0.59;0.92]],[[0.616;0.616],[0.616;0.69]]], #booster efficacy  for omicronmchanged in vac_time function
     [[[0.63;0.7],[0.7,0.96]],[[0.7;0.69],[0.69,0.95]],[[0.678;0.678],[0.678,0.69]]], #### 50:5:80
     [[[0.921]],[[0.88]],[[0.332]],[[0.68]],[[0.921]],[[0.332]]]] #### 50:5:80
     
-    vac_efficacy_sev::Array{Array{Array{Array{Float64,1},1},1},1} = [[[[0.77;0.88],[0.88;0.98]],[[0.81;0.81],[0.81;0.97]],[[0.676;0.676],[0.676;0.81]]], #booster efficacy for omicron changed in vac_time function
+    vac_efficacy_sev::Array{Array{Array{Array{Float32,1},1},1},1} = [[[[0.77;0.88],[0.88;0.98]],[[0.81;0.81],[0.81;0.97]],[[0.676;0.676],[0.676;0.81]]], #booster efficacy for omicron changed in vac_time function
     [[[0.66;0.7],[0.7,0.97]],[[0.9;0.91],[0.91,0.98]],[[0.744;0.744],[0.744,0.81]]],#### 50:5:80
     [[[0.921]],[[0.816]],[[0.34]],[[0.781]],[[0.921]],[[0.34]]]]#### 50:5:80
 
@@ -150,7 +143,6 @@ end
     contact_change_rate::Float64 = 1.0 #the rate that receives the value of change_rate_values
     contact_change_2::Float64 = 1.0 ##baseline number that multiplies the contact rate
 
-    relaxed::Bool = false
     
     turnon::Int64 = 1
 
@@ -674,9 +666,7 @@ function vac_update(x::Human)
             x.protected = x.index_day
             x.index_day = min(length(p.days_to_protection[x.vaccine_n][x.vac_status]),x.index_day+1)
         end
-        #= if !x.relaxed
-            x.relaxed = p.relaxed &&  x.vac_status >= p.status_relax && x.days_vac >= p.relax_after ? true : false
-        end =#
+        
         x.waning = waning_immunity(x)
         x.days_vac += 1
 
@@ -689,9 +679,7 @@ function vac_update(x::Human)
             x.protected = x.index_day
             x.index_day = min(length(p.days_to_protection[x.vaccine_n][x.vac_status]),x.index_day+1)
         end
-        #= if !x.relaxed
-            x.relaxed = p.relaxed &&  x.vac_status >= p.status_relax && x.days_vac >= p.relax_after ? true : false
-        end =#
+        
         x.waning = waning_immunity(x)
         x.days_vac += 1
     end
@@ -933,7 +921,6 @@ function insert_infected(health, num, ag,strain)
         @inbounds for i in h 
             x = humans[i]
             x.strain = strain
-            x.first_one = true
             x.dur = sample_epi_durations(x)
             if x.strain > 0
                 if health == PRE
@@ -1193,7 +1180,7 @@ function move_to_latent(x::Human)
         x.swap_status = ASYMP
         
     end
-    x.wentTo = x.swap
+    
     x.got_inf = true
     ## in calibration mode, latent people never become infectious.
     
@@ -1311,13 +1298,13 @@ function move_to_mild(x::Human)
     nra = 0
     if !x.iso
         #x.swap = x.strain == 1 ? MISO : MISO2  
-        if p.testing && !x.iso && x.isolate_mild 
+        if p.testing && !x.iso && x.isolate_mild && rand() < p.fmild
             if p.scenariotest >= 2
                 nra = 1
                 if rand() < _get_prob_test(x,p.test_ra)
                     _set_isolation(x, true, :mild)
                 end
-            elseif rand() < p.fmild
+            else
                 _set_isolation(x, true, :mild)
             end
         end
@@ -1499,7 +1486,7 @@ function move_to_hospicu(x::Human)
     _set_isolation(x, true, :hosp) # do not set the isovia property here.  
 
     if swaphealth == HOS
-        x.hospicu = 1 
+         
         if rand() < mh[gg] ## person will die in the hospital 
             x.exp = muH 
             aux_v = [DED;DED2;DED3]
@@ -1514,8 +1501,7 @@ function move_to_hospicu(x::Human)
             
         end    
     elseif swaphealth == ICU
-        x.hospicu = 2 
-                
+              
         if rand() < mc[gg] ## person will die in the ICU 
             x.exp = muC
             aux_v = [DED;DED2;DED3]
@@ -1621,7 +1607,7 @@ export _get_betavalue
     #if person is isolated, they can recieve only 3 maximum contacts
     
     if !x.iso 
-        aux = x.relaxed ? 1.0*(p.contact_change_rate^p.turnon) : p.contact_change_rate*p.contact_change_2
+        aux =  p.contact_change_rate*p.contact_change_2
         cnt = rand(negative_binomials(ag,aux)) ##using the contact average for shelter-in
         x.nextday_meetcnt_w = Int(round(cnt*x.proportion_contacts_workplace))
         x.nextday_meetcnt = cnt-x.nextday_meetcnt_w

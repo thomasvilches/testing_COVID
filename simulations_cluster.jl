@@ -1,7 +1,7 @@
 using Distributed
 using Base.Filesystem
 using DataFrames
-using CSV,Statistics,UnicodePlots,Query,ClusterManagers
+using CSV,Statistics,Query,ClusterManagers
 using Dates
 using DelimitedFiles
 
@@ -9,12 +9,12 @@ using DelimitedFiles
 
 #using covid19abm
 
-#addprocs(2, exeflags="--project=.")
+addprocs(4, exeflags="--project=.")
 
 
 #@everywhere using covid19abm
 
-addprocs(SlurmManager(500), N=16, topology=:master_worker, exeflags = "--project=.")
+#addprocs(SlurmManager(250), N=16, topology=:master_worker, exeflags = "--project=.")
 @everywhere using Parameters, Distributions, StatsBase, StaticArrays, Random, Match, DataFrames
 @everywhere include("covid19abm.jl")
 @everywhere const cv=covid19abm
@@ -94,8 +94,8 @@ end
 function create_folder(ip::cv.ModelParameters,province="ontario")
     
     #RF = string("heatmap/results_prob_","$(replace(string(ip.β), "." => "_"))","_vac_","$(replace(string(ip.vaccine_ef), "." => "_"))","_herd_immu_","$(ip.herd)","_$strategy","cov_$(replace(string(ip.cov_val)))") ## 
-    main_folder = "/data/thomas-covid/testing_canada"
-    #main_folder = "."
+    #main_folder = "/data/thomas-covid/testing_canada"
+    main_folder = "."
     
     RF = string(main_folder,"/results_prob_","$(replace(string(ip.β), "." => "_"))","_herd_immu_","$(ip.herd)","_idx_$(ip.file_index)_$(province)_strain_$(ip.strain)_scen_$(ip.scenariotest)_test_$(ip.test_ra)_eb_$(ip.extra_booster)_size_$(ip.size_threshold)") ##  
     
@@ -107,7 +107,7 @@ end
 
 
 
-function run_param_scen_cal(b::Float64,province::String="ontario",h_i::Int64 = 0,ic1::Int64=1,strains::Int64 = 1,index::Int64 = 0,scen::Int64 = 0,tra::Int64 = 0,eb::Int64 = 0,wpt::Int64 = 100,dayst::Vector{Int64} = [1;4],trans_omicron::Float64 = 1.0,immu_omicron::Float64 = 0.0,mt::Int64=300,test_time::Int64 = 1,test_dur::Int64=112,rc=[1.0],dc=[1],nsims::Int64=500)
+function run_param_scen_cal(b::Float64,province::String="ontario",h_i::Int64 = 0,ic1::Int64=1,strains::Int64 = 1,index::Int64 = 0,scen::Int64 = 0,tra::Int64 = 0,eb::Int64 = 0,wpt::Int64 = 100,mt::Int64=300,test_time::Int64 = 1,test_dur::Int64=112,mildcomp::Float64 = 1.0,dayst::Vector{Int64} = [1;4],trans_omicron::Float64 = 1.0,immu_omicron::Float64 = 0.0,rc=[1.0],dc=[1],nsims::Int64=500)
     
     
     @everywhere ip = cv.ModelParameters(β=$b,
@@ -127,10 +127,12 @@ function run_param_scen_cal(b::Float64,province::String="ontario",h_i::Int64 = 0
     immunity_omicron = $immu_omicron,
     transmissibility_omicron = $trans_omicron,
     start_testing = $test_time,
-    test_for = $test_dur)
+    test_for = $test_dur,
+    fmild = $mildcomp)
 
     folder = create_folder(ip,province)
 
-    run(ip,nsims,folder)
+    #run(ip,nsims,folder)
+    run(ip,12,folder)
    
 end

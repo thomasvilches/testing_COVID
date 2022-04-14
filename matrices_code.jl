@@ -4,7 +4,6 @@
 function vaccination_rate_1(sim::Int64)
     #must be written as the temporal series of vaccines per age group
     if p.prov == :ontario
-        
         v = [0 0 0 0 0 0 0 0 0
                 0 0 0 0 0 0 0 0 0
                 0 0 0 0 0 0 0 0 0
@@ -451,7 +450,6 @@ function vaccination_rate_1(sim::Int64)
         error("no state set")
     end
     
-
     return v
 end
 
@@ -1052,8 +1050,7 @@ end
 function booster_doses()
 
     if p.prov == :ontario
-        v = [0
-                0
+        v = [  0
                 0
                 0
                 0
@@ -2473,9 +2470,13 @@ function distribute_vaccine(M1,M2,B,sim)
 
     rng = MersenneTwister(200*sim)
     NN = min(NN,length(ranpos)) ## making sure we are capping the boosters
+
+    max_b = length(B)-findfirst(yy-> yy > 0, B)
+
     for i in ranpos[1:NN]
         x = humans[i]
-        x.days_vac = rand(rng,0:max(0,(x.days_vac-p.booster_after[x.vaccine_n]))) ##rand the day
+        dd = max(0,min((x.days_vac-p.booster_after[x.vaccine_n]),max_b))
+        x.days_vac = rand(rng,0:dd) ##rand the day
         x.protected = length(p.days_to_protection[x.vaccine_n][x.vac_status])
         x.index_day = min(length(p.days_to_protection[x.vaccine_n][x.vac_status]),x.protected+1)
         x.n_boosted += 1
