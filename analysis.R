@@ -156,7 +156,7 @@ population
 setwd("~/PosDoc/Coronavirus/Cost_eff/")
 
 data = read.csv("data/covid19-download.csv")
-data = data %>% filter(prname=="Ontario") %>% mutate(date = as.Date(date)) %>% select(date,numconf)
+data = data %>% filter(prname=="Ontario") %>% mutate(date = as.Date(date)) %>% select(date,numconf) 
 
 head(data)
 library(dplyr)
@@ -168,6 +168,10 @@ df = data %>%
   fill(`numconf`)
 df$inccases = diff(c(0,df$numconf))
 
+head(df)
+max(df$date)
+df = df%>% filter(date < enddate)
+
 ggplot()+geom_col(data=df,aes(x=date,y=inccases),fill="grey")+
   #geom_vline(aes(xintercept = d1), linetype = "dashed")+
   theme_bw()
@@ -176,7 +180,7 @@ ggplot()+geom_col(data=df,aes(x=date,y=inccases),fill="grey")+
 vector_aux = df$inccases/sum(df$inccases)
 va = rev(vector_aux)
 
-write.table(va,"data/vector_prob_ontario.dat",row.names= F,col.names = F)
+write.table(va,"data/vector_prob_ontario.csv",row.names= F,col.names = F)
 
 
 
