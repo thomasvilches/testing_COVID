@@ -46,16 +46,14 @@ function run(myp::cv.ModelParameters, nsims=1000, folderprefix="./")
     ag5 = vcat([cdr[i].g5 for i = 1:nsims]...)
     ag6 = vcat([cdr[i].g6 for i = 1:nsims]...)
     ag7 = vcat([cdr[i].g7 for i = 1:nsims]...)
-    ag8 = vcat([cdr[i].g8 for i = 1:nsims]...)
-    ag9 = vcat([cdr[i].g9 for i = 1:nsims]...) 
 
-    mydfs = Dict("all" => allag, "ag1" => ag1, "ag2" => ag2, "ag3" => ag3, "ag4" => ag4, "ag5" => ag5, "ag6" => ag6,"ag7" => ag7, "ag" => ag8,"ag9" => ag9, "working"=>working)
+    mydfs = Dict("all" => allag, "ag1" => ag1, "ag2" => ag2, "ag3" => ag3, "ag4" => ag4, "ag5" => ag5, "ag6" => ag6,"ag7" => ag7, "working"=>working)
     #mydfs = Dict("all" => allag, "working"=>working, "kids"=>kids)
     #mydfs = Dict("all" => allag)
     
     #c1 = Symbol.((:LAT, :PRE, :MILD, :INF, :HOS, :ICU, :DED,:LAT2, :PRE2, :MILD2, :INF2, :HOS2, :ICU2, :DED2,:LAT3, :PRE3, :MILD3, :INF3, :HOS3, :ICU3, :DED3), :_INC)
     
-    c1 = Symbol.((:LAT, :PRE, :MILD, :INF, :MISO, :IISO, :HOS, :ICU, :DED,:LAT2, :PRE2, :MILD2, :INF2, :MISO2, :IISO2, :HOS2, :ICU2, :DED2,:LAT3, :PRE3, :MILD3, :INF3, :MISO3, :IISO3, :HOS3, :ICU3, :DED3), :_INC)
+    c1 = Symbol.((:LAT, :MILD, :INF, :HOS, :ICU, :DED,:LAT2, :MILD2, :INF2, :HOS2, :ICU2, :DED2,:LAT3, :MILD3, :INF3, :HOS3, :ICU3, :DED3), :_INC)
     #c2 = Symbol.((:LAT, :HOS, :ICU, :DED,:LAT2, :HOS2, :ICU2, :DED2,:LAT3, :HOS3, :ICU3, :DED3), :_PREV)
     
     #c2 = Symbol.((:LAT, :HOS, :ICU, :DED,:LAT2, :HOS2, :ICU2, :DED2), :_PREV)
@@ -86,6 +84,8 @@ function run(myp::cv.ModelParameters, nsims=1000, folderprefix="./")
     writedlm(string(folderprefix,"/niso_f_p.dat"),hcat([cdr[i].niso_f_p for i=1:nsims]...))
     writedlm(string(folderprefix,"/niso_f_w.dat"),hcat([cdr[i].niso_f_w for i=1:nsims]...))
     writedlm(string(folderprefix,"/nleft.dat"),hcat([cdr[i].nleft for i=1:nsims]...))
+    writedlm(string(folderprefix,"/totalisog.dat"),vcat([cdr[i].giso for i=1:nsims]))
+    writedlm(string(folderprefix,"/totalisow.dat"),vcat([cdr[i].wiso for i=1:nsims]))
 
     return mydfs
 end
@@ -97,8 +97,14 @@ function create_folder(ip::cv.ModelParameters,province="ontario")
     main_folder = "/data/thomas-covid/testing_canada"
     #main_folder = "."
     
-    RF = string(main_folder,"/results_prob_","$(replace(string(ip.β), "." => "_"))","_herd_immu_","$(ip.herd)","_idx_$(ip.file_index)_$(province)_strain_$(ip.strain)_scen_$(ip.scenariotest)_test_$(ip.test_ra)_eb_$(ip.extra_booster)_size_$(ip.size_threshold)") ##  
+    secondaryfolder = string(main_folder,"/fmild_$(ip.fmild)_fwork_$(ip.fwork)") ##  
     
+    RF = string(secondaryfolder,"/results_prob_","$(replace(string(ip.β), "." => "_"))","_herd_immu_","$(ip.herd)","_idx_$(ip.file_index)_$(province)_strain_$(ip.strain)_scen_$(ip.scenariotest)_test_$(ip.test_ra)_eb_$(ip.extra_booster)_size_$(ip.size_threshold)") ##  
+    
+    if !Base.Filesystem.isdir(secondaryfolder)
+        Base.Filesystem.mkpath(secondaryfolder)
+    end
+
     if !Base.Filesystem.isdir(RF)
         Base.Filesystem.mkpath(RF)
     end
@@ -107,7 +113,7 @@ end
 
 
 
-function run_param_scen_cal(b::Float64,province::String="ontario",h_i::Int64 = 0,ic1::Int64=1,strains::Int64 = 1,index::Int64 = 0,scen::Int64 = 0,tra::Int64 = 0,eb::Int64 = 0,wpt::Int64 = 100,mt::Int64=300,test_time::Int64 = 1,test_dur::Int64=112,mildcomp::Float64 = 1.0,dayst::Vector{Int64} = [1;4],trans_omicron::Float64 = 1.0,immu_omicron::Float64 = 0.0,rc=[1.0],dc=[1],nsims::Int64=500)
+function run_param_scen_cal(b::Float64,province::String="ontario",h_i::Int64 = 0,ic1::Int64=1,strains::Int64 = 1,index::Int64 = 0,scen::Int64 = 0,tra::Int64 = 0,eb::Int64 = 0,wpt::Int64 = 100,mt::Int64=300,test_time::Int64 = 1,test_dur::Int64=112,mildcomp::Float64 = 1.0,workcomp::Float64 = 1.0,dayst::Vector{Int64} = [1;4],trans_omicron::Float64 = 1.0,immu_omicron::Float64 = 0.0,rc=[1.0],dc=[1],nsims::Int64=500)
     
     
     @everywhere ip = cv.ModelParameters(β=$b,
@@ -128,11 +134,12 @@ function run_param_scen_cal(b::Float64,province::String="ontario",h_i::Int64 = 0
     transmissibility_omicron = $trans_omicron,
     start_testing = $test_time,
     test_for = $test_dur,
-    fmild = $mildcomp)
+    fmild = $mildcomp,
+    fwork = $workcomp)
 
     folder = create_folder(ip,province)
 
     run(ip,nsims,folder)
-    #run(ip,12,folder)
+    #run(ip,4,folder)
    
 end

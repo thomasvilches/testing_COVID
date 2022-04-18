@@ -60,7 +60,8 @@ Base.@kwdef mutable struct Human
     isolate_sev::Bool = false
     isofalse::Bool = false
     waning::Vector{Float64} = [1.0;1.0]
-    proportion_contacts_workplace::Float64 = 0.0    
+    proportion_contacts_workplace::Float64 = 0.0
+    totaldaysiso::Int32 = 0  
 end
 
 ## default system parameters
@@ -167,6 +168,7 @@ end
     test_for::Int64 = 112
     days_pcr::Int64 = 1
     testing::Bool = false
+    fwork::Float64 = 1.0  ## proportion of participation of workplaces
     #prop_working::Float64 = 0.65 #https://www.ontario.ca/document/ontario-employment-reports/april-june-2021#:~:text=Ontario's%20overall%20labour%20force%20participation,years%20and%20over%20at%2038.8%25.
 end
 
@@ -206,14 +208,14 @@ function runsim(simnum, ip::ModelParameters)
     # get simulation age groups
     #ags = [x.ag for x in humans] # store a vector of the age group distribution 
     #ags = [x.ag_new for x in humans] # store a vector of the age group distribution 
-    range_work = 18:65
+    
     ags = map(x-> x.workplace_idx > 0 ? 1 : 2,humans)
 
     all1 = _collectdf(hmatrix)
     spl = _splitstate(hmatrix, ags)
     work = _collectdf(spl[1])
     
-    age_groups = [0:4, 5:17, 18:29, 30:39, 40:49, 50:64, 65:74, 75:84, 85:999]
+    age_groups = [0:14, 15:24, 25:34, 35:44, 45:54, 55:64, 65:999]
     ags = map(x->findfirst(y-> x.age in y, age_groups),humans) # store a vector of the age group distribution 
     spl = _splitstate(hmatrix, ags)
     ag1 = _collectdf(spl[1])
@@ -223,12 +225,9 @@ function runsim(simnum, ip::ModelParameters)
     ag5 = _collectdf(spl[5])
     ag6 = _collectdf(spl[6])
     ag7 = _collectdf(spl[7])
-    ag8 = _collectdf(spl[8])
-    ag9 = _collectdf(spl[9])
     insertcols!(all1, 1, :sim => simnum); insertcols!(ag1, 1, :sim => simnum); insertcols!(ag2, 1, :sim => simnum); 
     insertcols!(ag3, 1, :sim => simnum); insertcols!(ag4, 1, :sim => simnum); insertcols!(ag5, 1, :sim => simnum);
-    insertcols!(ag6, 1, :sim => simnum); insertcols!(ag7, 1, :sim => simnum); insertcols!(ag8, 1, :sim => simnum); 
-    insertcols!(ag9, 1, :sim => simnum); insertcols!(work, 1, :sim => simnum);
+    insertcols!(ag6, 1, :sim => simnum); insertcols!(ag7, 1, :sim => simnum); insertcols!(work, 1, :sim => simnum);
     
 
     pos = findall(y-> y in (11,22,33),hmatrix[:,end])
@@ -240,9 +239,16 @@ function runsim(simnum, ip::ModelParameters)
         vector_ded[(x.age+1)] += 1
     end
 
-    return (a=all1, g1=ag1, g2=ag2, g3=ag3, g4=ag4, g5=ag5,g6=ag6,g7=ag7,g8=ag8,g9=ag9, work = work,
+    ### total days of isolation per age group, both working and general
+    geniso_gr = map(y->findall(x-> x.age in y,humans),age_groups)
+    workiso_gr = map(y->findall(x-> x.age in y && x.workplace_idx > 0,humans),age_groups)
+
+    giso = map(y-> sum([ii.totaldaysiso for ii in humans[y]]),geniso_gr)
+    wiso = map(y-> sum([ii.totaldaysiso for ii in humans[y]]),workiso_gr)
+
+    return (a=all1, g1=ag1, g2=ag2, g3=ag3, g4=ag4, g5=ag5,g6=ag6,g7=ag7, work = work,
     vector_dead=vector_ded,nra=nra,npcr=npcr, R0 = R01, niso_t_p=niso_t_p, niso_t_w=niso_t_w,
-    niso_f_p=niso_f_p,niso_f_w=niso_f_w, nleft=nleft)
+    niso_f_p=niso_f_p,niso_f_w=niso_f_w, nleft=nleft,giso = giso, wiso = wiso)
 end
 export runsim
 
@@ -302,6 +308,7 @@ function main(ip::ModelParameters,sim::Int64)
         initial_dw = st+(p.initial_day_week-1)-7*Int(floor((st-1+(p.initial_day_week-1))/7))
         for x in humans
             if x.iso && !(x.health_status in (HOS,ICU,DED))
+                x.totaldaysiso += 1
                 if x.isofalse
                     niso_f_p[st] += 1
                     if x.workplace_idx > 0
@@ -335,6 +342,7 @@ function main(ip::ModelParameters,sim::Int64)
         initial_dw = st+(p.initial_day_week-1)-7*Int(floor((st-1+(p.initial_day_week-1))/7))
         for x in humans
             if x.iso && !(x.health_status in (HOS,ICU,DED))
+                x.totaldaysiso += 1
                 if x.isofalse
                     niso_f_p[st] += 1
                     if x.workplace_idx > 0
@@ -363,6 +371,7 @@ function main(ip::ModelParameters,sim::Int64)
         initial_dw = st+(p.initial_day_week-1)-7*Int(floor((st-1+(p.initial_day_week-1))/7))
         for x in humans
             if x.iso && !(x.health_status in (HOS,ICU,DED))
+                x.totaldaysiso += 1
                 if x.isofalse
                     niso_f_p[st] += 1
                     if x.workplace_idx > 0
@@ -470,11 +479,13 @@ function select_testing_group(workplaces::Vector{Vector{Int64}},sim::Int64)
         grp_iso_mild = deepcopy(grp)
     elseif p.scenariotest == 3
         wpr = findall(x-> length(x) >= p.size_threshold,workplaces)
+        wpr = sample(rng,wpr,Int(round(p.fwork*length(wpr))),replace=false)
         grp = vcat(workplaces[wpr]...)
         grp_iso_sev =  findall(x-> x.age >= 5, humans)
         grp_iso_mild = deepcopy(grp_iso_sev)
     elseif p.scenariotest == 4
         wpr = findall(x-> length(x) >= p.size_threshold,workplaces)
+        wpr = sample(rng,wpr,Int(round(p.fwork*length(wpr))),replace=false)
         grp = vcat(workplaces[wpr]...)
         grp_iso_sev =  findall(x-> x.age >= 5, humans)
         grp_iso_mild = deepcopy(grp_iso_sev)
