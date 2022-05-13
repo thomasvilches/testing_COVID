@@ -4,8 +4,8 @@
 
 #0.35 for omicron generates a R0 of 0.84
 
-propmild = 0.5
-propwork = 0.5
+propmild = 0.0
+propwork = 1.0
 
 
 #run_param_scen_cal(b,province,h_i,ic1,strains,index,scen,tra,eb,wpt,dayst,rc,dc,mt,vac,nsims)

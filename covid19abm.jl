@@ -158,7 +158,7 @@ end
     ##for testing
     initial_day_week::Int64 = 1 # 1- Monday ... 7- Sunday
     testing_days::Vector{Int64} = [1;4]
-    days_ex_test::Int64 = 0 ## 3 months without testing
+    days_ex_test::Int64 = 30 ## 3 months without testing
     isolation_days::Int64 = 5 #how many days of isolation after testing
     test_ra::Int64 = 0 #1 - PCR, 2 - Abbott_PanBio 3 - 	BTNX_Rapid_Response	4 - Artron
     scenariotest::Int64 = 0
@@ -583,12 +583,14 @@ function testing(dayweek)
                 end
                 
             elseif x.test && !x.iso
-                if dayweek in p.testing_days && x.days_after_detection > p.days_ex_test
-                    pp = _get_prob_test(x,p.test_ra)
-                    if rand() < pp
-                        x.positive = true
-                        _set_isolation(x,true,:test)
-                        x.isofalse = x.daysinf < 999 ? false : true
+                if dayweek in p.testing_days
+                    if x.days_after_detection > p.days_ex_test
+                        pp = _get_prob_test(x,p.test_ra)
+                        if rand() < pp
+                            x.positive = true
+                            _set_isolation(x,true,:test)
+                            x.isofalse = x.daysinf < 999 ? false : true
+                        end
                     end
                     x.nra += 1
                     nra += 1
@@ -609,17 +611,19 @@ function testing(dayweek)
                 
             elseif x.test
                 if !x.iso
-                    if dayweek in p.testing_days && x.days_after_detection > p.days_ex_test
-                        pp = _get_prob_test(x,p.test_ra)
-                        if rand() < pp
-                            x.positive = true
-                            _set_isolation(x,true,:test)
-                            
-                            x.tookpcr = true
-                            x.days_for_pcr = p.days_pcr#rand(1:2)
-                            npcr+=1
-                            x.pcrprob = _get_prob_test(x,1)
-                            x.isofalse = x.daysinf < 999 ? false : true
+                    if dayweek in p.testing_days
+                        if x.days_after_detection > p.days_ex_test
+                            pp = _get_prob_test(x,p.test_ra)
+                            if rand() < pp
+                                x.positive = true
+                                _set_isolation(x,true,:test)
+                                
+                                x.tookpcr = true
+                                x.days_for_pcr = p.days_pcr#rand(1:2)
+                                npcr+=1
+                                x.pcrprob = _get_prob_test(x,1)
+                                x.isofalse = x.daysinf < 999 ? false : true
+                            end
                         end
                         x.nra += 1
                         nra += 1

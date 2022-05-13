@@ -42,3 +42,14 @@ Baseline scenario:
 - Testing with RA the working population if mild case.
 
 - Asymptomatic testing of working population with RA and follow up with PCR if positive.
+
+
+
+
+# TO DO
+
+- change the daysinf feature
+
+- Change the sensitivity (chad)
+
+- Asymptomatic -> reduction of 40%

@@ -2620,7 +2620,7 @@ function _get_prob_test(x::Human,test::Int64)
     #1 - RT-PCR, 2 - Abbott_PanBio 3 - BTNX_Rapid_Response	4 - Artron
     if x.daysinf+1 > size(M[1],1)
         d = 1
-        pp = [0.005 0.015 0.015 0.015]
+        pp = [0.001 0.002 0.002 0.002]#[0.005 0.015 0.015 0.015]
         prob = pp[1,test]
         
     else
