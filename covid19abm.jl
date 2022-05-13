@@ -22,6 +22,8 @@ Base.@kwdef mutable struct Human
     isovia::Symbol = :null ## isolated via quarantine (:qu), preiso (:pi), intervention measure (:im), or contact tracing (:ct)    
     comorbidity::Int8 = 0 ##does the individual has any comorbidity?
     vac_status::Int8 = 0 ##
+    wentto::Int8 = 0
+    incubationp::Int16 = 0
 
     got_inf::Bool = false
     herd_im::Bool = false
@@ -168,30 +170,22 @@ end
     test_for::Int64 = 112
     days_pcr::Int64 = 1
     testing::Bool = false
+    asymp_red::Float16 = 0.6
     fwork::Float64 = 1.0  ## proportion of participation of workplaces
     #prop_working::Float64 = 0.65 #https://www.ontario.ca/document/ontario-employment-reports/april-june-2021#:~:text=Ontario's%20overall%20labour%20force%20participation,years%20and%20over%20at%2038.8%25.
 end
 
-Base.@kwdef mutable struct ct_data_collect
-    total_symp_id::Int64 = 0  # total symptomatic identified
-    totaltrace::Int64 = 0     # total contacts traced
-    totalisolated::Int64 = 0  # total number of people isolated
-    iso_sus::Int64 = 0        # total susceptible isolated 
-    iso_lat::Int64 = 0        # total latent isolated
-    iso_asymp::Int64 = 0      # total asymp isolated
-    iso_symp::Int64 = 0       # total symp (mild, inf) isolated
-end
 
 Base.show(io::IO, ::MIME"text/plain", z::Human) = dump(z)
 
 include("matrices_code.jl")
+include("matrices.jl")
 ## constants 
 const humans = Array{Human}(undef, 0) 
 const p = ModelParameters()  ## setup default parameters
 const agebraks = @SVector [0:4, 5:19, 20:49, 50:64, 65:99]
 #const agebraks_vac = @SVector [0:0,1:4,5:14,15:24,25:44,45:64,65:74,75:100]
 const BETAS = Array{Float64, 1}(undef, 0) ## to hold betas (whether fixed or seasonal), array will get resized
-const ct_data = ct_data_collect()
 const waning_factors = waning_factor()
 const waning_factors_rec = waning_factor()
 export ModelParameters, HEALTH, Human, humans, BETAS
@@ -589,7 +583,7 @@ function testing(dayweek)
                         if rand() < pp
                             x.positive = true
                             _set_isolation(x,true,:test)
-                            x.isofalse = x.daysinf < 999 ? false : true
+                            x.isofalse = x.health_status in (SUS,REC) ? true : false
                         end
                     end
                     x.nra += 1
@@ -622,7 +616,7 @@ function testing(dayweek)
                                 x.days_for_pcr = p.days_pcr#rand(1:2)
                                 npcr+=1
                                 x.pcrprob = _get_prob_test(x,1)
-                                x.isofalse = x.daysinf < 999 ? false : true
+                                x.isofalse = x.health_status in (SUS,REC) ? true : false
                             end
                         end
                         x.nra += 1
@@ -634,7 +628,7 @@ function testing(dayweek)
                             x.daysisolation = 999
                             x.tookpcr = false
                             x.days_after_detection = 999
-                            nleft += Int(x.daysinf < 999)
+                            nleft += Int(!(x.health_status in (SUS,REC)))
                         else
                             x.positive = true
                         end
@@ -709,11 +703,11 @@ function reset_params(ip::ModelParameters)
     end
 
     # reset the contact tracing data collection structure
-    for x in propertynames(ct_data)
+    #= for x in propertynames(ct_data)
         setfield!(ct_data, x, 0)
     end
 
-    # resize and update the BETAS constant array
+    =#    # resize and update the BETAS constant array
     #init_betas()
 
     # resize the human array to change population size
@@ -942,6 +936,7 @@ function insert_infected(health, num, ag,strain)
                     x.swap = aux_pre[x.strain]
                     x.swap_status = PRE
                     x.daysinf = x.dur[1]+1
+                    x.wentto = 1
                     move_to_pre(x) ## the swap may be asymp, mild, or severe, but we can force severe in the time_update function
                 elseif health == LAT
                     x.swap = aux_lat[x.strain]
@@ -951,19 +946,23 @@ function insert_infected(health, num, ag,strain)
                 elseif health == MILD
                     x.swap =  aux_mild[x.strain] 
                     x.swap_status = MILD
+                    x.wentto = 1
                     x.daysinf = x.dur[2]+1
                     move_to_mild(x)
                 elseif health == INF
                     x.swap = aux_inf[x.strain]
                     x.swap_status = INF
+                    x.wentto = 1
                     move_to_infsimple(x)
                 elseif health == ASYMP
                     x.swap = aux_asymp[x.strain]
                     x.swap_status = ASYMP
+                    x.wentto = 2
                     move_to_asymp(x)
                 elseif health == REC 
                     x.swap_status = REC
                     x.swap = aux_rec[x.strain]
+                    x.wentto = rand(1:2)
                     move_to_recovered(x)
                 else 
                     error("can not insert human of health $(health)")
@@ -1113,12 +1112,14 @@ function sample_epi_durations(y::Human)
         pre_dist = Distributions.truncated(Gamma(1.058, 5/2.3), 0.8, 3)#truncated between 0.8 and 3
     end
 
+
     asy_dist = Gamma(5, 1)
     inf_dist = Gamma((3.2)^2/3.7, 3.7/3.2)
 
     aux = y.vac_status > 1 || y.recovered ? p.reduce_days : 0
 
     latents = Int.(round.(rand(lat_dist)))
+    y.incubationp = latents
     pres = Int.(round.(rand(pre_dist)))
     latents = latents - pres # ofcourse substract from latents, the presymp periods
     asymps = max(Int.(ceil.(rand(asy_dist)))-aux,1)
@@ -1188,11 +1189,13 @@ function move_to_latent(x::Human)
         aux_v = [PRE;PRE2;PRE3]
         x.swap = aux_v[x.strain]
         x.swap_status = PRE
+        x.wentto = 1
         
     else
         aux_v = [ASYMP;ASYMP2;ASYMP3]
         x.swap = aux_v[x.strain]
         x.swap_status = ASYMP
+        x.wentto = 2
         
     end
     
@@ -1564,7 +1567,7 @@ function move_to_recovered(h::Human)
     h.exp = 999 ## stay recovered indefinitely
     #h.iso = false ## a recovered person has ability to meet others
     h.recvac = 1
-    h.daysinf = 999
+    #h.daysinf = 999
     
     #_set_isolation(h, false)  # do not set the isovia property here.  
     # isolation property has no effect in contact dynamics anyways (unless x == SUS)

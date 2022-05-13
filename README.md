@@ -48,8 +48,8 @@ Baseline scenario:
 
 # TO DO
 
-- change the daysinf feature
+- change the daysinf feature &rarr; okay
 
-- Change the sensitivity (chad)
+- Change the sensitivity (chad) &rarr; OKAY
 
-- Asymptomatic -> reduction of 40%
+- Asymptomatic -> reduction of 40% &rarr; OKAY
