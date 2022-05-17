@@ -22,7 +22,7 @@ addprocs(SlurmManager(500), N=16, topology=:master_worker, exeflags = "--project
 
 function run(myp::cv.ModelParameters, nsims=1000, folderprefix="./")
     println("starting $nsims simulations...\nsave folder set to $(folderprefix)")
-    dump(myp)
+    #dump(myp)
    
     # will return 6 dataframes. 1 total, 4 age-specific 
     cdr = pmap(1:nsims) do x                 

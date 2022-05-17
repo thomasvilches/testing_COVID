@@ -1314,9 +1314,11 @@ function move_to_mild(x::Human)
     # NOTE: if need to count non-isolated mild people, this is overestimate as isolated people should really be in MISO all the time
     #   and not go through the mild compartment 
     nra = 0
+    
     if !x.iso
+        rng = MersenneTwister(246*x.dur[1]*x.dur[2]*x.dur[3])
         #x.swap = x.strain == 1 ? MISO : MISO2  
-        if p.testing && !x.iso && x.isolate_mild && rand() < p.fmild
+        if p.testing && x.isolate_mild && rand(rng) < p.fmild
             if p.scenariotest >= 2
                 nra = 1
                 if rand() < _get_prob_test(x,p.test_ra)
