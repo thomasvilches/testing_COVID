@@ -382,3 +382,59 @@ head(df_f)
   ncontacts*0.28
   
   
+
+# coverage ----------------------------------------------------------------
+
+  
+  setwd("~/PosDoc/Coronavirus/Cost_eff/")
+  
+  data.file = read.csv("data/age-distribution.csv") #https://www150.statcan.gc.ca/t1/tbl1/en/tv.action?pid=1710000501
+  
+  
+  data = read.csv("data/vaccination-coverage-byAgeAndSex-overTimeDownload.csv")
+  head(data)
+  data %>% pull(prfname) %>% unique()
+  data = data %>% filter(prfname == "Ontario") %>% rename(date = week_end) %>% mutate(date = ymd(date)) 
+  
+  data %>% pull(sex) %>% unique()
+  data %>% pull(age) %>% unique()
+  
+  
+  df = data %>%
+    filter(!(age %in% c("Not reported","Unknown", "All ages")),sex == "All sexes") %>%
+    mutate(prop_dose1 = as.numeric(proptotal_atleast1dose),prop_fully = as.numeric(proptotal_fully),
+           prop_booster = as.numeric(proptotal_additional)) 
+  
+  ggplot(df,aes(x = date,y = prop_dose1, color = age))+
+    geom_line()
+  
+  
+  
+  
+  
+  df = data %>%
+    filter(!(age %in% c("Not reported","Unknown", "All ages")),sex == "All sexes") %>%
+    mutate(numtotal_fully = as.numeric(numtotal_fully),numtotal_atleast1dose = as.numeric(numtotal_atleast1dose),
+           numtotal_additional = as.numeric(numtotal_additional)) %>% 
+    select(date,age,numtotal_fully,numtotal_atleast1dose,numtotal_additional)%>%
+    rename(groups=age,fully=numtotal_fully,partial=numtotal_atleast1dose,booster=numtotal_additional) %>%
+    mutate(booster=replace_na(booster,0))
+  head(df)
+  
+  
+  df %>% filter(abs(as.integer(date-as.Date("2022-04-01"))) < 10)
+  
+  dd = df %>% filter(date == as.Date("2022-03-27"))
+  
+  agg = c("60–69","70–79","80+")
+  
+  totalpop = data.file %>% pull(X2021) %>%
+              str_replace_all(",","") %>% as.numeric()
+  
+  cbind(data.file$Age.group.3.5,totalpop)
+  tt = sum(totalpop[14:22])
+  dd[dd$groups %in% agg,] %>% summarise(sp = sum(partial)/tt,
+                                        sf = sum(fully)/tt,
+                                        sb = sum(booster)/tt) %>%
+    rename(at_least_1 = sp, fully = sf, booster = sb)
+  
