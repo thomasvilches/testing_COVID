@@ -162,7 +162,7 @@ end
     testing_days::Vector{Int64} = [1;4]
     days_ex_test::Int64 = 30 ## 3 months without testing
     isolation_days::Int64 = 5 #how many days of isolation after testing
-    test_ra::Int64 = 0 #1 - PCR, 2 - Abbott_PanBio 3 - 	BTNX_Rapid_Response	4 - Artron
+    test_ra::Int64 = 0 #1 - PCR, 2 - Abbott_PanBio 3 - 	BD VERITO	4 - SOFIA
     scenariotest::Int64 = 0
     size_threshold::Int64 = 100
     extra_booster::Int64 = 0
@@ -483,6 +483,12 @@ function select_testing_group(workplaces::Vector{Vector{Int64}},sim::Int64)
         grp = vcat(workplaces[wpr]...)
         grp_iso_sev =  findall(x-> x.age >= 5, humans)
         grp_iso_mild = deepcopy(grp_iso_sev)
+    elseif p.scenariotest == 5
+        wpr = findall(x-> length(x) >= p.size_threshold,workplaces)
+        wpr = sample(rng,wpr,Int(round(p.fwork*length(wpr))),replace=false)
+        grp = vcat(workplaces[wpr]...)
+        grp_iso_sev =  findall(x-> x.age >= 5, humans)
+        grp_iso_mild = deepcopy(grp_iso_sev)
     elseif p.scenariotest == 999
         grp = []
         grp_iso_sev = deepcopy(grp)
@@ -625,6 +631,53 @@ function testing(dayweek)
                 else
                     if x.days_for_pcr == 0
                         if rand() > x.pcrprob
+                            x.daysisolation = 999
+                            x.tookpcr = false
+                            x.days_after_detection = 999
+                            nleft += Int(!(x.health_status in (SUS,REC)))
+                        else
+                            x.positive = true
+                        end
+                    end
+                end
+                
+            end
+        end
+    elseif p.scenariotest == 5
+        for x in humans
+            x.days_for_pcr -= 1
+            if x.isovia == :sev
+                if !x.tookpcr#x.daysisolation == 0
+                    x.days_for_pcr = p.days_pcr#rand(1:2)
+                    npcr+=1
+                    x.pcrprob = _get_prob_test(x,1)
+                    x.tookpcr = true
+               
+                end
+                
+            elseif x.test
+                if !x.iso
+                    if dayweek in p.testing_days
+                        if x.days_after_detection > p.days_ex_test
+                            pp = _get_prob_test(x,p.test_ra)
+                            if rand() < pp
+                                x.positive = true
+                                _set_isolation(x,true,:test)
+                                
+                                x.tookpcr = true
+                                x.days_for_pcr = p.days_pcr#rand(1:2)
+                                npcr+=1
+                                x.pcrprob = _get_prob_test(x,1)
+                                x.isofalse = x.health_status in (SUS,REC) ? true : false
+                            end
+                        end
+                        x.nra += 1
+                        nra += 1
+                    end
+                else
+                    if x.days_for_pcr == 0
+                        pp = _get_prob_test(x,p.test_ra)
+                        if rand() > pp
                             x.daysisolation = 999
                             x.tookpcr = false
                             x.days_after_detection = 999
