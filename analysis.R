@@ -1,440 +1,415 @@
-setwd("~/PosDoc/Coronavirus/Cost_eff/")
-library(readxl)
+setwd("/data/thomas-covid/testing_canada/")
 library(dplyr)
-library(ggplot2)
 library(zoo)
-library(lubridate)
 library(data.table)
+library(colorspace)
+library(rcartocolor)
+library(ggplot2)
 library(tidyverse)
+library(ggpubr)
+population = 14826276 
+pal_col = carto_pal(n = 8, name = "Bold")[c(1, 3, 7, 2,8)]
+# Functions ---------------------------------------------------------------
 
 
-# Cases -------------------------------------------------------------------
-
-data = read.csv("data/covid19-download.csv")
-head(data)
-data = data[data$prname == "Ontario",]
-data$date = as.Date(data$date)
-head(data)
-data = data[,c(4,6,8)]
-head(data)
-
-data$inccases = diff(c(0,data$numconf))
-data$incdeaths = diff(c(0,data$numdeaths))
-
-
-data$roll7cases = frollmean(data$inccases,7)
-data$roll7deaths = frollmean(data$incdeaths,7)
+read_file_incidence <- function(index,type,strain = 1,scen = 0,test = 0,eb = 0,size = 50,beta = "0515",folder = ".",st2 = "ontario",hi="10",ag="all"){
   
-ggplot()+geom_col(data=data,aes(x=date,y=inccases),fill="grey")+
-  geom_line(data=data,aes(x = date, y = roll7cases),color = "navy")+
-  #geom_vline(aes(xintercept = d1), linetype = "dashed")+
-  theme_bw()
+  data.cases1 = read.table(paste0(folder,"/results_prob_0_",beta,"_herd_immu_",hi,"_idx_",index,"_",st2,"_strain_",strain,"_scen_",scen,"_test_",test,"_eb_",eb,"_size_",size,"/simlevel_",type,"_inc_",ag,".dat"),',',h = T)
+  data.cases1 = data.cases1[,-1]
+
+  data.cases2 = read.table(paste0(folder,"/results_prob_0_",beta,"_herd_immu_",hi,"_idx_",index,"_",st2,"_strain_",strain,"_scen_",scen,"_test_",test,"_eb_",eb,"_size_",size,"/simlevel_",type,"2_inc_",ag,".dat"),',',h = T)
+  data.cases2 = data.cases2[,-1]
+
+  data.cases3 = read.table(paste0(folder,"/results_prob_0_",beta,"_herd_immu_",hi,"_idx_",index,"_",st2,"_strain_",strain,"_scen_",scen,"_test_",test,"_eb_",eb,"_size_",size,"/simlevel_",type,"3_inc_",ag,".dat"),',',h = T)
+  data.cases3 = data.cases3[,-1]
 
 
-ggplot()+geom_col(data=data,aes(x=date,y=incdeaths),fill="grey")+
-  geom_line(data=data,aes(x = date, y = roll7deaths),color = "red")+
-  #geom_vline(aes(xintercept = d2), linetype = "dashed")+
-  theme_bw()
+  l = list(data.cases1,data.cases2,data.cases3)
 
-
-aa = max(data$roll7cases[data$date <= as.Date("2021-03-01") & data$date >= as.Date("2020-11-01") & !is.na(data$roll7cases)])
-aa
-
-d1 = data$date[data$roll7cases == aa & !is.na(data$roll7cases) ]
-
-
-aa = max(data$roll7deaths[data$date <= as.Date("2021-03-01") & data$date >= as.Date("2020-11-01")  & !is.na(data$roll7deaths)])
-aa
-
-d2 = data$date[data$roll7deaths == aa & !is.na(data$roll7deaths) ]
-d2
-
-d2-d1
-
-data$dated = data$date-16
-
-
-
-
-ggplot()+#geom_col(data=data,aes(x=date,y=inccases),fill="grey")+
-  geom_line(data=data,aes(x = date, y = roll7cases),size=1.5,color = "navy")+
-  geom_line(data=data,aes(x = date, y = roll7deaths),size=1.5,color = "red")+
-  scale_y_continuous(trans="log")+
-  #geom_vline(aes(xintercept = data$dated[length(data$dated)]),linetype = "dashed")+
-  #geom_vline(aes(xintercept = d1),linetype = "dashed")+
-  theme_bw()
-
-
-
-
-calc_cor <- function(k){
-  x1 = x[!is.na(x)]
-  y1 = y[!is.na(y)]
-  
-  x1 = x1[1:(length(x1)-k)]
-  y1 = y1[(k+1):length(y1)]
-  
-  cc = cor(x1,y1,method="spearman")
-  
-  par(mfrow=c(1,2))
-  plot(x1,y1, main = paste("k=",k," cor=", cc))
-  plot(rank(x1),rank(y1),main = paste(cc))
-  
-  return(cc)
+  return(l[[strain]])
+  #return(xx)
 }
 
-x = data$roll7cases
-y = data$roll7deaths
 
-kk = seq(0,30)
+fc <- function(d, i){
+  return(mean(d[i],na.rm=T))
+}
+# R0 ----------------------------------------------------------------------
+R0 = read.table("results_prob_0_053_herd_immu_10_idx_98_ontario_strain_3_scen_0_test_0_eb_0_size_50/R01.dat")
+mean(R0$V1)
+fc <- function(d, i){
+  return(mean(d[i],na.rm=T))
+}
 
-ccc = sapply(kk, calc_cor)
-par(mfrow=c(1,1))
-plot(ccc)
-
-l = length(data$date)
-aaa = data$roll7deaths[16:l]/data$roll7cases[1:(l-15)]
-plot(aaa,ylim = c(0,0.04))
-
-ll = length(aaa)
-m = mean(aaa[(ll-10):ll])
-
-m*data$roll7cases[nrow(data)]
+bb = boot::boot(R0$V1,fc,R=500)
+mean(bb$t[,1])
+boot::boot.ci(bb,0.95)
 
 
-# Draw first plot using axis y1
-par(mar = c(7, 3, 5, 4) + 0.3)              
-plot(data$date, data$roll7cases, type = "l", col = "navy")  
-abline(v = d1)
-# set parameter new=True for a new axis
-par(new = TRUE)         
+# Isolation ---------------------------------------------------------------
+Iso = read.table("results_prob_0_042_herd_immu_10_idx_1_ontario_strain_3_scen_4_test_2_eb_0_size_50/niso_f_w.dat")
+sum(Iso)
+iso=colSums(Iso)
+mean(iso)
+fc <- function(d, i){
+  return(mean(d[i],na.rm=T))
+}
 
-# Draw second plot using axis y2
-plot(data$dated, data$roll7deaths, type = "l", col = "red", axes = FALSE)
+bb = boot::boot(iso,fc,R=1000)
+mean(bb$t[,1])
+boot::boot.ci(bb,0.95)
 
-axis(side = 4, at = pretty(range(data$roll7deaths[!is.na(data$roll7deaths)])))      
-mtext("y2", side = 4, line = 3)
-abline(v = d1)
+# Simple plot -------------------------------------------------------------
+
+type_d = "lat"
+xx = read_file_incidence(98,type_d,3,0,0,booster,50,"053",folder)
+nr = nrow(xx)
+sum(xx)/500
+
+df = data.frame(days = seq(1,nr),mm = rowMeans(xx))
+df$roll7 = frollmean(df$mm,7)
 
 
 
-
-##############################################
-
-setwd("~/PosDoc/Coronavirus/Cost_eff/")
-
-data.file = read.csv("data/age-distribution.csv") #https://www150.statcan.gc.ca/t1/tbl1/en/tv.action?pid=1710000501
-
-y = data.file[,6]
-y
-age = as.numeric(gsub(",", "", y))
-
-data = data.frame(count = age)
-rownames(data) = data.file[,1]
-
-g1 = data["0 to 4 years","count"]
-g2 = sum(data[c("5 to 9 years","10 to 14 years"),"count"])
-g3 = sum(data[c("15 to 19 years","20 to 24 years"),"count"])
-g4 = sum(data[c("25 to 29 years","30 to 34 years"),"count"])
-g5 = sum(data[c("35 to 39 years","40 to 44 years"),"count"])
-g6 = sum(data[c("45 to 49 years","50 to 54 years"),"count"])
-g7 = sum(data[c("55 to 59 years","60 to 64 years"),"count"])
-g8 = sum(data[c("65 to 69 years","70 to 74 years"),"count"])
-g9 = sum(data[c("75 to 79 years","80 to 84 years"),"count"])
-g10 = sum(data[c("85 to 89 years","90 to 94 years","95 to 99 years","100 years and over"),"count"])
-
-vector = c(g1,g2,g3,g4,g5,g6,g7,g8,g9,g10)
-sum(vector) == data["All ages","count"]
-
-vector/sum(vector)
-
-population = sum(vector)
-population
-
-##############################################
-
-setwd("~/PosDoc/Coronavirus/Cost_eff/")
-
-data = read.csv("data/covid19-download.csv")
-data = data %>% filter(prname=="Ontario") %>% mutate(date = as.Date(date)) %>% select(date,numconf) 
-
-head(data)
-library(dplyr)
-library(tidyr)
-
-df = data %>%
-  complete(date = seq.Date(min(date), max(date), by="day")) %>%
-  #group_by(Product) %>%
-  fill(`numconf`)
-df$inccases = diff(c(0,df$numconf))
-
-head(df)
-max(df$date)
-df = df%>% filter(date < enddate)
-
-ggplot()+geom_col(data=df,aes(x=date,y=inccases),fill="grey")+
-  #geom_vline(aes(xintercept = d1), linetype = "dashed")+
+df %>% filter(days <= 500) %>% ggplot()+
+  geom_line(aes(x=days,y=mm),color = "black", size = 1.2)+
+  geom_line(aes(x=days,y=roll7),color = "red", size = 1.2)+
   theme_bw()
 
-
-vector_aux = df$inccases/sum(df$inccases)
-va = rev(vector_aux)
-
-write.table(va,"data/vector_prob_ontario.csv",row.names= F,col.names = F)
+sum(df$mm)
 
 
 
-# Vaccination Coverage ----------------------------------------------------
+# PCR ----------------------------------------------------------------------
+R0 = read.table("results_prob_0_042_herd_immu_10_idx_1_ontario_strain_3_scen_1_test_1_eb_0_size_100/npcr.dat")
+mean(colSums(R0))
+fc <- function(d, i){
+  return(mean(d[i],na.rm=T))
+}
 
+bb = boot::boot(R0$V1,fc,R=500)
+mean(bb$t[,1])
+boot::boot.ci(bb,0.95)
+
+
+
+# plot incidence ----------------------------------------------------------
+
+type_d = "lat"
+beta = "042"
+x4.2 = read_file_incidence(1,type_d,3,4,2,50,beta,"weird_run")
+
+x2.2 = read_file_incidence(1,type_d,3,2,2,50,beta,"weird_run")
+x3.2 = read_file_incidence(1,type_d,3,3,2,50,beta,"weird_run")
+
+x0 = read_file_incidence(1,type_d,3,0,0,50,beta,"weird_run")
+x1 = read_file_incidence(2,type_d,3,0,0,50,beta,"weird_run")
+
+nr = nrow(x4.2)
+
+
+df4.2 = data.frame(mm = frollmean(rowMeans(x4.2),7),days = seq(1,nr),scen = rep("4",nr),test = rep(tests[2],nr))
+df2.2 = data.frame(mm = frollmean(rowMeans(x2.2),7),days = seq(1,nr),scen = rep("2",nr),test = rep(tests[2],nr))
+df3.2 = data.frame(mm = frollmean(rowMeans(x3.2),7),days = seq(1,nr),scen = rep("3",nr),test = rep(tests[2],nr))
+
+df = rbind(df4.2,df2.2,df3.2)
+
+
+df1 = data.frame(mm = frollmean(rowMeans(x1),7),days = seq(1,nr),scen = rep("1",nr),test = rep(tests[1],nr))
+df0 = data.frame(mm = frollmean(rowMeans(x0),7),days = seq(1,nr),scen = rep("3",nr),test = rep(tests[1],nr))
+
+
+ggplot()+
+  geom_line(data = df,aes(x = days,y=mm,color = scen),size = 1.2)+
+  geom_line(data = df0,aes(x = days,y=mm,color = "0"),size = 1.2)+
+  geom_line(data = df1,aes(x = days,y=mm,color = "1"),size = 1.2)+
+  scale_color_manual(values = pal_col)+theme_bw()
+
+  
+
+# Comparing ---------------------------------------------------------------
+tests = c("PCR","Abbott_PanBio","BTNX_Rapid_Response","Artron")
+
+type_d = "lat"
+booster = 0
+beta = "053"
+folder = "fmild_1.0_fwork_1.0/"
+test_idx = 2
+idx = 1
+
+
+
+df_f$scen = factor(df_f$scen,levels = c("0","1","2","3","4"))
+
+# ggplot()+
+#   geom_line(data = df_f,aes(x = days,y=mm,color = scen),size = 1.2)+
+#   scale_x_continuous(limits = c(0,250))+
+#   scale_y_continuous(limits = c(0,5))+
+#   facet_grid(.~idx)+
+#   geom_vline(xintercept=c(112,224),linetype="dashed")+
+#   scale_color_manual(values = pal_col)+theme_bw()
+
+
+p1 = ggplot()+
+  geom_line(data = df_f,aes(x = days,y=mm,color = scen),size = 1.2)+
+  facet_grid(.~idx)+
+  geom_vline(xintercept=c(112,224),linetype="dashed")+
+  scale_y_continuous(name = "Incidence")+
+  scale_x_continuous(name = "Days")+
+  scale_color_manual(values = pal_col,name = NULL)+theme_bw()
+#p1
+
+
+# Boxplot -----------------------------------------------------------------
+
+
+######## 
+x4.2 = read_file_incidence(2,type_d,3,4,2,booster,50,beta,folder)
+x2.2 = read_file_incidence(2,type_d,3,2,2,booster,50,beta,folder)
+x3.2 = read_file_incidence(2,type_d,3,3,2,booster,50,beta,folder)
+x0 = read_file_incidence(2,type_d,3,0,0,booster,50,beta,folder)
+x1 = read_file_incidence(2,type_d,3,1,0,booster,50,beta,folder)
+
+nr = 500
+
+df4.2 = data.frame(mm = boot::boot(colSums(x4.2),fc,R=nr)$t[,1],days = seq(1,nr),scen = rep("4",nr),test = rep(tests[2],nr))
+df2.2 = data.frame(mm = boot::boot(colSums(x2.2),fc,R=nr)$t[,1],days = seq(1,nr),scen = rep("2",nr),test = rep(tests[2],nr))
+df3.2 = data.frame(mm = boot::boot(colSums(x3.2),fc,R=nr)$t[,1],days = seq(1,nr),scen = rep("3",nr),test = rep(tests[2],nr))
+
+df1 = data.frame(mm = boot::boot(colSums(x1),fc,R=nr)$t[,1],days = seq(1,nr),scen = rep("1",nr),test = rep(tests[1],nr))
+df0 = data.frame(mm = boot::boot(colSums(x0),fc,R=nr)$t[,1],days = seq(1,nr),scen = rep("0",nr),test = rep(tests[1],nr))
+
+df = rbind(df4.2,df2.2,df3.2,df0,df1)
+
+df$idx = rep(2,nrow(df))
+
+df_f = rbind(df_f,df)
+
+#########
+
+x4.2 = read_file_incidence(3,type_d,3,4,2,booster,50,beta,folder)
+x2.2 = read_file_incidence(3,type_d,3,2,2,booster,50,beta,folder)
+x3.2 = read_file_incidence(3,type_d,3,3,2,booster,50,beta,folder)
+x0 = read_file_incidence(3,type_d,3,0,0,booster,50,beta,folder)
+x1 = read_file_incidence(3,type_d,3,1,0,booster,50,beta,folder)
+
+nr = 500
+
+df4.2 = data.frame(mm = boot::boot(colSums(x4.2),fc,R=nr)$t[,1],days = seq(1,nr),scen = rep("4",nr),test = rep(tests[2],nr))
+df2.2 = data.frame(mm = boot::boot(colSums(x2.2),fc,R=nr)$t[,1],days = seq(1,nr),scen = rep("2",nr),test = rep(tests[2],nr))
+df3.2 = data.frame(mm = boot::boot(colSums(x3.2),fc,R=nr)$t[,1],days = seq(1,nr),scen = rep("3",nr),test = rep(tests[2],nr))
+
+df1 = data.frame(mm = boot::boot(colSums(x1),fc,R=nr)$t[,1],days = seq(1,nr),scen = rep("1",nr),test = rep(tests[1],nr))
+df0 = data.frame(mm = boot::boot(colSums(x0),fc,R=nr)$t[,1],days = seq(1,nr),scen = rep("0",nr),test = rep(tests[1],nr))
+
+df = rbind(df4.2,df2.2,df3.2,df0,df1)
+
+df$idx = rep(3,nrow(df))
+
+df_f = rbind(df_f,df)
+
+
+#########
+
+x4.2 = read_file_incidence(4,type_d,3,4,2,booster,50,beta,folder)
+x2.2 = read_file_incidence(4,type_d,3,2,2,booster,50,beta,folder)
+x3.2 = read_file_incidence(4,type_d,3,3,2,booster,50,beta,folder)
+x0 = read_file_incidence(4,type_d,3,0,0,booster,50,beta,folder)
+x1 = read_file_incidence(4,type_d,3,1,0,booster,50,beta,folder)
+
+nr = 500
+
+df4.2 = data.frame(mm = boot::boot(colSums(x4.2),fc,R=nr)$t[,1],days = seq(1,nr),scen = rep("4",nr),test = rep(tests[2],nr))
+df2.2 = data.frame(mm = boot::boot(colSums(x2.2),fc,R=nr)$t[,1],days = seq(1,nr),scen = rep("2",nr),test = rep(tests[2],nr))
+df3.2 = data.frame(mm = boot::boot(colSums(x3.2),fc,R=nr)$t[,1],days = seq(1,nr),scen = rep("3",nr),test = rep(tests[2],nr))
+
+df1 = data.frame(mm = boot::boot(colSums(x1),fc,R=nr)$t[,1],days = seq(1,nr),scen = rep("1",nr),test = rep(tests[1],nr))
+df0 = data.frame(mm = boot::boot(colSums(x0),fc,R=nr)$t[,1],days = seq(1,nr),scen = rep("0",nr),test = rep(tests[1],nr))
+
+df = rbind(df4.2,df2.2,df3.2,df0,df1)
+
+df$idx = rep(4,nrow(df))
+
+df_f = rbind(df_f,df)
+
+
+#########
+
+x4.2 = read_file_incidence(5,type_d,3,4,2,booster,50,beta,folder)
+x2.2 = read_file_incidence(5,type_d,3,2,2,booster,50,beta,folder)
+x3.2 = read_file_incidence(5,type_d,3,3,2,booster,50,beta,folder)
+x0 = read_file_incidence(5,type_d,3,0,0,booster,50,beta,folder)
+x1 = read_file_incidence(5,type_d,3,1,0,booster,50,beta,folder)
+
+nr = 500
+
+df4.2 = data.frame(mm = boot::boot(colSums(x4.2),fc,R=nr)$t[,1],days = seq(1,nr),scen = rep("4",nr),test = rep(tests[2],nr))
+df2.2 = data.frame(mm = boot::boot(colSums(x2.2),fc,R=nr)$t[,1],days = seq(1,nr),scen = rep("2",nr),test = rep(tests[2],nr))
+df3.2 = data.frame(mm = boot::boot(colSums(x3.2),fc,R=nr)$t[,1],days = seq(1,nr),scen = rep("3",nr),test = rep(tests[2],nr))
+
+df1 = data.frame(mm = boot::boot(colSums(x1),fc,R=nr)$t[,1],days = seq(1,nr),scen = rep("1",nr),test = rep(tests[1],nr))
+df0 = data.frame(mm = boot::boot(colSums(x0),fc,R=nr)$t[,1],days = seq(1,nr),scen = rep("0",nr),test = rep(tests[1],nr))
+
+df = rbind(df4.2,df2.2,df3.2,df0,df1)
+
+df$idx = rep(5,nrow(df))
+
+df_f = rbind(df_f,df)
+
+df_f$scen = factor(df_f$scen,levels = c("0","1","2","3","4"))
+
+
+p2 = ggplot()+
+  geom_boxplot(data = df_f,aes(x = scen,y=mm,color = scen,fill=after_scale(colorspace::lighten(color, .5))),notch = T,size = 1.2)+
+  facet_grid(.~idx)+
+  scale_y_continuous(name = "Total infections")+
+  scale_x_discrete(name = "Scenario")+
+  scale_color_manual(values = pal_col,name = NULL)+theme_bw()+
+  scale_fill_manual(values = pal_col,name = NULL)+theme_bw()+
+  theme(strip.background = element_blank(),
+        strip.text = element_blank(),
+        axis.text.y = element_text(angle = 90,hjust=0.5))
+#p2
+
+
+# Arrange Plots -----------------------------------------------------------
+
+ggarrange(p1,p2,nrow=2)
+
+# plot incidence compare two----------------------------------------------------------
+
+type_d = "lat"
+
+x0 = read_file_incidence(0,type_d,3,999,0,80,50,"049",".")
+x1 = read_file_incidence(1,type_d,3,999,0,80,50,"049",".")
+
+nr = nrow(x1)
+
+
+df1 = data.frame(mm = frollmean(rowMeans(x1),7),days = seq(1,nr),scen = rep("1",nr),test = rep(tests[1],nr))
+df0 = data.frame(mm = frollmean(rowMeans(x0),7),days = seq(1,nr),scen = rep("0",nr),test = rep(tests[1],nr))
+
+
+ggplot()+
+  geom_line(data = df0,aes(x = days,y=mm,color = scen),size = 1.2)+
+  geom_line(data = df1,aes(x = days,y=mm,color = scen),size = 1.2)+
+  scale_color_manual(values = pal_col)+theme_bw()
+
+sum(df1$mm,na.rm=T)
+sum(df0$mm,na.rm=T)
+
+# Some tests --------------------------------------------------------------
+library(dplyr)
 library(ggplot2)
-library(reshape2)
-# https://health-infobase.canada.ca/covid-19/vaccination-coverage/
 
-data = read.csv("data/vaccination-coverage-byAgeAndSex-overTimeDownload.csv")
-head(data)
-data %>% pull(prfname) %>% unique()
-data = data %>% filter(prfname == "Ontario") %>% rename(date = week_end) %>% mutate(date = ymd(date)) 
+type_d = "lat"
+booster = 80
+beta = "049"
+folder = "."
 
-data %>% pull(sex) %>% unique()
-data %>% pull(age) %>% unique()
+R0 = read.table("results_prob_0_049_herd_immu_10_idx_4_ontario_strain_3_scen_2_test_2_eb_80_size_50/npcr.dat")
+mean(colSums(R0))
 
-
-df = data %>%
-  filter(!(age %in% c("Not reported","Unknown", "All ages")),sex == "All sexes") %>%
-  mutate(numtotal_fully = as.numeric(numtotal_fully),numtotal_atleast1dose = as.numeric(numtotal_atleast1dose),
-         numtotal_additional = as.numeric(numtotal_additional)) %>% 
-  select(date,age,numtotal_fully,numtotal_atleast1dose,numtotal_additional)%>%
-  rename(groups=age,fully=numtotal_fully,partial=numtotal_atleast1dose,booster=numtotal_additional) %>%
-  mutate(booster=replace_na(booster,0))
-head(df)
-
-
-df_f = df %>% select(date,groups,fully) %>%   
-  pivot_wider(names_from = c(groups), values_from = c(fully))
-df_f[is.na(df_f)]=0
-df_f
-order = c("date","0–4","05–11","12–17","18–29","30–39","40–49","50–59","60–69","70–79","80+")
-df_f = as.data.frame(df_f)
-df_f = df_f[,order]
-head(df_f)
-
-
-aa = df_f %>%
-  complete(date = seq.Date(min(date), max(date), by="day")) %>%
-  #group_by(Product) %>%
-  fill(colnames(df_f)[-1])
-
-
-M2 = sapply(aa[,3:11], diff) ###starting at 2020-12-20
-#M2 = abs(M2)
-M2[M2<0] = 0
-
-ggplot(melt(abs(M2)), aes(x=Var1, y=value, col=Var2))+
-  geom_line()
-
-
-sum(M2)/population
-
-M22 = round(abs(M2)/population*100000)
-M22
-
-write.table(M22,"data/dose2.dat",row.names = F,col.names = F)
-
-###dose 1
-
-
-df_f = df %>% select(date,groups,partial) %>% as_tibble() %>%
-  pivot_wider(names_from = c(groups), values_from = c(partial))
-df_f[is.na(df_f)]=0
-df_f
-
-order = c("date","0–4","05–11","12–17","18–29","30–39","40–49","50–59","60–69","70–79","80+")
-df_f = as.data.frame(df_f)
-df_f = df_f[,order]
-head(df_f)
-
-
-aa = df_f %>%
-  complete(date = seq.Date(min(date), max(date), by="day")) %>%
-  #group_by(Product) %>%
-  fill(colnames(df_f)[-1])
-
-
-M1 = sapply(aa[,3:11], diff) ###starting at 2020-12-20
-#M1 = abs(M1)
-
-ggplot(melt(M1), aes(x=Var1, y=value, col=Var2))+
-  geom_line()
-
-sum(abs(M1))/population
-
-M1[M1<0] = 0
-
-M12 = round(abs(M1)/population*100000)
-sum(M12)/100000
-
-write.table(M12,"data/dose1.dat",row.names = F,col.names = F)
+R0 = read.table("results_prob_0_049_herd_immu_10_idx_4_ontario_strain_3_scen_2_test_2_eb_80_size_50/nra.dat")
+mean(colSums(R0[-nrow(R0),]))
 
 
 
-###booster
+type_d = "inf"
+#index,type,strain = 1,scen = 0,test = 0,eb = 0,size = 50,beta = "045",st2 = "ontario",hi="10",ag="all")
+x0 = read_file_incidence(4,type_d,3,2,2,booster,50,beta,folder)
+a=mean(colSums(x0))
+x1 =read_file_incidence(4,type_d,3,2,2,booster,50,beta,folder,"ontario","10","ag1")
+b = mean(colSums(x1))
+a-b
 
 
-df_f = df %>% select(date,groups,booster)  %>% group_by(date) %>% summarise(booster = sum(booster))
-head(df_f)
+aux = seq(112,224)
+type_d = "mild"
+#index,type,strain = 1,scen = 0,test = 0,eb = 0,size = 50,beta = "045",st2 = "ontario",hi="10",ag="all")
+x0 = read_file_incidence(4,type_d,3,1,0,booster,50,beta,folder)
+a=mean(colSums(x0[aux,]))
+x1 =read_file_incidence(4,type_d,3,1,0,booster,50,beta,folder,"ontario","10","ag1")
+b = mean(colSums(x1[aux,]))
+a-b
 
-df_f = df %>% group_by(date) %>% summarise(booster = sum(booster))
 
-plot(df_f$booster/population)
-head(df_f)
-  
-  
-  
-  aa = df_f %>%
-  complete(date = seq.Date(min(date), max(date), by="day")) %>%
-  #group_by(Product) %>%
-  fill(colnames(df_f)[-1])
-  
-  B =diff(aa$booster) ###starting at 2020-12-20
-  B[B<0]
-  
-  plot(B,type = "l")
-  
-  sum(B)/population
-  
-  B2 = round(B/population*100000)
-  sum(B2)/100000
-  
-  write.table(B2,"data/booster_dose.dat",row.names = F,col.names = F)
-  
-  
-  ## vaccine type https://health-infobase.canada.ca/covid-19/vaccination-coverage/
-  pfizer = 6299358
-  moderna = 1760955
-  
-  v = c(pfizer,moderna)
-  
-  v/sum(v)
+xx = x0-x1
+aa = seq(1,500)[colSums(xx == R0) != 365]
 
+nn = xx[,aa]
+rr = R0[,aa]
+
+colnames(nn) = c("sim1","sim2","sim3")
+colnames(rr) = c("sim1","sim2","sim3")
+
+nnn = data.frame(ii = rep(seq(1,nrow(nn)),3),stack(nn))
+rrr = data.frame(ii = rep(seq(1,nrow(rr)),3),stack(rr))
+
+df = inner_join(nnn,rrr,by = c("ind","ii"))
+
+df %>% filter(ind == "sim1") %>% ggplot()+geom_line(aes(x=ii,y=values.y,color = ind),linetype = "solid")+
+  geom_line(aes(x=ii,y=values.x,color = ind),linetype = "dashed")+
+  geom_point(data = df%>%filter(ind == "sim1",values.x != values.y),
+             aes(x=ii,y = values.y),shape=1,size=3)+
+  scale_y_continuous(limits=c(75,100))
   
 
-# Contact Distribution ----------------------------------------------------
-  
-  data.file = read.csv("data/age-distribution.csv") #https://www150.statcan.gc.ca/t1/tbl1/en/tv.action?pid=1710000501
-  
-  y = data.file[,6]
-  y
-  age = as.numeric(gsub(",", "", y))
-  
-  data = data.frame(group=data.file[,1],count = age)
-  
-  
-  together_group = c("80 to 84 years","85 to 89 years","90 to 94 years","95 to 99 years","100 years and over")
-  g10 = data %>% filter(group %in% together_group) %>% pull(count) %>% sum()
-  
-  df = data %>% filter(!(group %in% together_group)) %>% rbind(data.frame(group=c("80 and over"),count = c(g10))) %>%
-    filter(group != "All ages")
-  
-  
-  
-  data.contact = readxl::read_excel("data/CONNECT1_Mixing matrices_20210512 copy.xlsx",sheet = "Total",skip = 1)
-  data.contact = data.contact[,-1]
-  #[0:4, 5:19, 20:49, 50:64, 65:99]
-  group_idx = list(1,c(2,3,4),c(5,6,7,8,9,10),c(11,12,13),c(14,15,16,17))
-  
-  #Let's create a matrix with the weighted average of the columns based on age groups
-  
-  fwm <- function(x){
-    pp = df$count[x]/sum(df$count[x])
-    cc = as.matrix(data.contact[,x]) %*% t(t(pp))
-    ct = lapply(group_idx, function(y) sum(cc[y,])) %>% do.call("rbind",.)
-    return(ct)
-  }
-  
-  lcontacts = lapply(group_idx, fwm) %>% do.call("cbind",.)
-  
-  ncontacts = colSums(lcontacts)
-  pmatrix = lapply(1:5, function(x) (lcontacts[,x]/ncontacts[x])) %>% do.call("cbind",.)
-  t(pmatrix)
-  colSums(pmatrix)  
-  
-  mean0 = c(10.21,
-            16.79,
-            13.79,
-            11.26,
-            8.00)
-  sd_0 = c(7.65,
-           11.72,
-           10.50,
-           9.59,
-           6.96)
-  
-  
-  (sd = ncontacts/mean0*sd_0)
-  shelter = c(2.86, 4.7, 3.86, 3.15, 2.24)
-  shelter/mean0  
-  
-  sd_shelter = c(2.14, 3.28, 2.94, 2.66, 1.95)
-  
-  sd_shelter/sd_0
-  
-  sd*0.28
-  ncontacts*0.28
-  
-  
+type_d = "mild"
+#index,type,strain = 1,scen = 0,test = 0,eb = 0,size = 50,beta = "045",st2 = "ontario",hi="10",ag="all")
+x0 = read_file_incidence(1,type_d,3,1,0,0,50,"045","ontario","10","all")
+a=mean(colSums(x0[-nrow(x0),]))
+x1 = read_file_incidence(1,type_d,3,1,0,0,50,"045","ontario","10","ag1")
+b = mean(colSums(x1[-nrow(x1),]))
+a-b
 
-# coverage ----------------------------------------------------------------
 
-  
-  setwd("~/PosDoc/Coronavirus/Cost_eff/")
-  
-  data.file = read.csv("data/age-distribution.csv") #https://www150.statcan.gc.ca/t1/tbl1/en/tv.action?pid=1710000501
-  
-  
-  data = read.csv("data/vaccination-coverage-byAgeAndSex-overTimeDownload.csv")
-  head(data)
-  data %>% pull(prfname) %>% unique()
-  data = data %>% filter(prfname == "Ontario") %>% rename(date = week_end) %>% mutate(date = ymd(date)) 
-  
-  data %>% pull(sex) %>% unique()
-  data %>% pull(age) %>% unique()
-  
-  
-  df = data %>%
-    filter(!(age %in% c("Not reported","Unknown", "All ages")),sex == "All sexes") %>%
-    mutate(prop_dose1 = as.numeric(proptotal_atleast1dose),prop_fully = as.numeric(proptotal_fully),
-           prop_booster = as.numeric(proptotal_additional)) 
-  
-  ggplot(df,aes(x = date,y = prop_dose1, color = age))+
-    geom_line()
-  
-  
-  
-  
-  
-  df = data %>%
-    filter(!(age %in% c("Not reported","Unknown", "All ages")),sex == "All sexes") %>%
-    mutate(numtotal_fully = as.numeric(numtotal_fully),numtotal_atleast1dose = as.numeric(numtotal_atleast1dose),
-           numtotal_additional = as.numeric(numtotal_additional)) %>% 
-    select(date,age,numtotal_fully,numtotal_atleast1dose,numtotal_additional)%>%
-    rename(groups=age,fully=numtotal_fully,partial=numtotal_atleast1dose,booster=numtotal_additional) %>%
-    mutate(booster=replace_na(booster,0))
-  head(df)
-  
-  
-  df %>% filter(abs(as.integer(date-as.Date("2022-04-01"))) < 10)
-  
-  dd = df %>% filter(date == as.Date("2022-03-27"))
-  
-  agg = c("60–69","70–79","80+")
-  
-  totalpop = data.file %>% pull(X2021) %>%
-              str_replace_all(",","") %>% as.numeric()
-  
-  cbind(data.file$Age.group.3.5,totalpop)
-  tt = sum(totalpop[14:22])
-  dd[dd$groups %in% agg,] %>% summarise(sp = sum(partial)/tt,
-                                        sf = sum(fully)/tt,
-                                        sb = sum(booster)/tt) %>%
-    rename(at_least_1 = sp, fully = sf, booster = sb)
-  
+
+
+# Plot 1 scen -------------------------------------------------------------
+
+
+type_d = "lat"
+booster = 80
+beta = "049"
+idx = 4
+folder = "."
+x4.2 = read_file_incidence(idx,type_d,3,4,2,booster,50,beta,folder)
+x2.2 = read_file_incidence(idx,type_d,3,2,2,booster,50,beta,folder)
+x3.2 = read_file_incidence(idx,type_d,3,3,2,booster,50,beta,folder)
+x0 = read_file_incidence(idx,type_d,3,0,0,booster,50,beta,folder)
+x1 = read_file_incidence(idx,type_d,3,1,0,booster,50,beta,folder)
+nr = nrow(x4.2)
+
+
+df4.2 = data.frame(mm = frollmean(rowMeans(x4.2),7),days = seq(1,nr),scen = rep("4",nr),test = rep(tests[2],nr))
+df2.2 = data.frame(mm = frollmean(rowMeans(x2.2),7),days = seq(1,nr),scen = rep("2",nr),test = rep(tests[2],nr))
+df3.2 = data.frame(mm = frollmean(rowMeans(x3.2),7),days = seq(1,nr),scen = rep("3",nr),test = rep(tests[2],nr))
+
+df1 = data.frame(mm = frollmean(rowMeans(x1),7),days = seq(1,nr),scen = rep("1",nr),test = rep(tests[1],nr))
+df0 = data.frame(mm = frollmean(rowMeans(x0),7),days = seq(1,nr),scen = rep("0",nr),test = rep(tests[1],nr))
+
+df = rbind(df4.2,df2.2,df3.2,df0,df1)
+
+df$idx = rep(idx,nrow(df))
+
+ggplot()+
+  geom_line(data = df,aes(x = days,y=mm,color = scen),size = 1.2)+
+  scale_x_continuous(limits = c(0,250))+
+  scale_y_continuous(limits = c(0,5))+
+  facet_grid(.~idx)+
+  geom_vline(xintercept=c(112,224),linetype="dashed")+
+  scale_color_manual(values = pal_col)+theme_bw()
+
+
+ggplot()+
+  geom_line(data = df,aes(x = days,y=mm,color = scen),size = 1.2)+
+  facet_grid(.~idx)+
+  geom_vline(xintercept=c(112,224),linetype="dashed")+
+  scale_color_manual(values = pal_col)+theme_bw()
+
+df %>% group_by(scen) %>% summarize(total = sum(mm,na.rm=T))
+
+aux = seq(112,224)
+df %>% filter(days %in% aux) %>% group_by(scen) %>% summarize(total = sum(mm,na.rm=T))
+
